@@ -18,7 +18,7 @@ jobs:
     - name: Rename
       run: |
           mkdir output
-          mv proposal.pdf output/
+          mv proposal/proposal.pdf output/
     - uses: actions/upload-artifact@v1
       with:
         name: proposal.pdf
