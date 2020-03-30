@@ -10,4 +10,4 @@ My research project primarily focusses on developing methods to filter or ignore
 
 There will be multiple components of this research repository, and links to all of them will be found in this section.
 
-- [Proposal](https://tommoa.github.io/proposal/proposal.pdf)
+- [Proposal](https://tommoa.github.io/ozgrav-research/proposal.pdf)
