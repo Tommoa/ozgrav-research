@@ -43,27 +43,97 @@
 
 \subsection{A brief history of gravitational waves}
 
-In 1687, Isaac Newton published his book, ``\textit{Philosophi\ae{} Naturalis Principia Mathematica}'', containing his law of universal gravitation. It has since been taught in high-schools across the world in introductory physics classes with the formula \( F = G\dfrac{m_1m_2}{r^2} \), due in part to its simplicity and general accuracy for predicting movement. Despite its general applicability, one major issue of the theory is that it infers that gravitational is instantaneously applied, without any apparent method through which it could be transmitted.
+In 1687, Isaac Newton published his book, ``\textit{Philosophi\ae{} Naturalis Principia
+Mathematica}'', containing his law of universal gravitation. It has since been taught in
+high-schools across the world in introductory physics classes with the formula \( F =
+G\dfrac{m_1m_2}{r^2} \), due in part to its simplicity and general accuracy for predicting
+movement. Despite its general applicability, one major issue of the theory is that it infers that
+gravitational is instantaneously applied, without any apparent method through which it could be
+transmitted.
 
-Roughly two centuries later, in 1905, Albert Einstein presented the theory of special relativity in his paper ``\textit{Zur Elektrodynamik bewegter K{\"o}rper}'' (English: \textit{``On the Electrodynamics of Moving Bodies''}). The theory introduced the concept of \textbf{spacetime} to describe inertial reference frames as a four-dimensional coordinate system, \((t, x, y, z)\), where $t$ is time and $(x, y, z)$ are the three spatial dimensions. He further stated two important axioms; that the speed of light in a vacuum is the same for all observers regardless of motion and that the laws of physics are invariant in all inertial frames of reference. About ten years later, Albert Einstein incorporated the effect of gravity with special relativity, forming the general theory of relativity.
+Roughly two centuries later, in 1905, Albert Einstein presented the theory of special relativity
+in his paper ``\textit{Zur Elektrodynamik bewegter K{\"o}rper}'' (English: \textit{``On the
+Electrodynamics of Moving Bodies''}). The theory introduced the concept of \textbf{spacetime} to
+describe inertial reference frames as a four-dimensional coordinate system, \((t, x, y, z)\), where
+$t$ is time and $(x, y, z)$ are the three spatial dimensions. He further stated two important
+axioms; that the speed of light in a vacuum is the same for all observers regardless of motion and
+that the laws of physics are invariant in all inertial frames of reference. About ten years later,
+Albert Einstein incorporated the effect of gravity with special relativity, forming the general
+theory of relativity.
 
-The general theory of relativity postulates that the effect of gravity can be characterised as each gravitational potential source changing the curvature of spacetime. The relationship of gravitational mass-energy and the shape of spacetime is given by Einstein's field equations:
+The general theory of relativity postulates that the effect of gravity can be characterised as each
+gravitational potential source changing the curvature of spacetime. The relationship of
+gravitational mass-energy and the shape of spacetime is given by Einstein's field equations:
 
 \begin{equation}
     G_{\mu{}v} + \Lambda{}g_{\mu{}v} = \dfrac{8\pi{}G}{c^4}T_{\mu{}v}
 \end{equation}
 
-where \(T_{\mu{}v}\) is the stress-energy tensor \footnote{Tensors are very similar to matrices of vectors and are typically used to describe mathematical geometric relationships}, \(G_{\mu{}v}\) is the Einstein tensor, \(g_{\mu{}v}\) is the spacetime metric, \(\Lambda\) is the cosmological constant, \(G\) is the universal gravitational constant and \(c\) is the speed of light.
+where \(T_{\mu{}v}\) is the stress-energy tensor \footnote{Tensors are very similar to matrices of
+vectors and are typically used to describe mathematical geometric relationships}, \(G_{\mu{}v}\) is
+the Einstein tensor, \(g_{\mu{}v}\) is the spacetime metric, \(\Lambda\) is the cosmological
+constant, \(G\) is the universal gravitational constant and \(c\) is the speed of light.
 
-An implication of gravity curving spacetime is that massive accelerating objects would cause `ripples' in fabric of spacetime called gravitational waves. The existence of gravitational waves remained a theory until 1974, when Russell Hulse and Joseph Taylor discovered a binary pair of neutron stars that were orbiting each other. After several years of measurement, they found that the speed at which the stars were orbiting each other was slowing in a manner consistent with the predictions of the general theory of relativity, showing that gravitational waves did indeed exist.
+An implication of gravity curving spacetime is that massive accelerating objects would cause
+`ripples' in fabric of spacetime called gravitational waves. The existence of gravitational waves
+remained a theory until 1974, when Russell Hulse and Joseph Taylor discovered a binary pair of
+neutron stars that were orbiting each other. After several years of measurement, they found that
+the speed at which the stars were orbiting each other was slowing in a manner consistent with the
+predictions of the general theory of relativity, showing that gravitational waves did indeed exist.
 
 \subsection{Gravitational wave detection}
 
-Interferometry is the use of wave interference \textendash{} in which waves superpose on each other to create a resultant wave \textendash{} to study various phenomena. After several experiments to study the use of interferometry to detect gravitational waves in the 1960s and 1970s, several large laser interferometric detectors were built throughout the early 2000s, including the American Laser Interferometer Gravitational-Wave Observatory (LIGO), the Italian Virgo detector and the German GEO600 detector. After no direct detection of gravitational waves in the initial observation runs from 2002 to 2011, the majority of the detectors began work to increase their sensitivity throughout the 2010s. The increase in sensitivity has succeeded in the search for gravitational waves, with the first direct detection occurring on the 14th of September, 2015.
+Interferometry is the use of wave interference \textendash{} in which waves superpose on each other
+to create a resultant wave \textendash{} to study various phenomena. After several experiments to
+study the use of interferometry to detect gravitational waves in the 1960s and 1970s, several large
+laser interferometric detectors were built throughout the early 2000s, including the American Laser
+Interferometer Gravitational-Wave Observatory (LIGO), the Italian Virgo detector and the German
+GEO600 detector. After no direct detection of gravitational waves in the initial observation runs
+from 2002 to 2011, the majority of the detectors began work to increase their sensitivity throughout
+the 2010s. The increase in sensitivity has succeeded in the search for gravitational waves, with the
+first direct detection occurring on the 14th of September, 2015. Since then, more detectors have
+started being built, including the Japanese KAGRA detector and the Indian LIGO detector.
 
-The detectors are designed as Michelson interferometers. 
+The detectors are designed as Michelson interferometers.
+% Talk about the way that Michelson interferometers work, and how they output information
+%
+% Talk about LAL and GSTLAL
+
+\subsection{The SPIIR Pipeline}
+% Talk about Qi Chu's paper and the current pipeline shape
 
 \section{Problem Description \& Goal}
+As of \today{}, the SPIIR pipeline supports the use of three detectors for gravitational wave
+searching \textendash{} the two American LIGO detectors and the Virgo detector. There are several
+issues with the current approach that this research project aims to address.
+
+Further detectors are likely to be coming online in the near future, with old detectors occasionally
+being removed from detection for maintainance. With the current design of the pipeline, adding and
+removing detectors is a significant undertaking that takes a substantial amount of development time.
+
+In addition, if a detector is indeed added to SPIIR, the detector \textit{\textbf{must}} be used for
+all stages of the pipeline, and can't be used just for synchronization purposes. This presents an
+issue as additional detectors are added, as each detector has its own sensitivity, readings
+variations and range of observable gravitational wave frequencies, resulting in some detectors being
+suitable for searching specific frequency ranges whilst showing no discernable change in output for
+other detectors, causing many false negatives.
+
+An ideal architecture for the pipeline would be significantly more composable, able to add and
+remove the usage of different detectors for varying stages of the pipeline.
+\\
+
+As such, this research project aims to complete a subsection of this idealised architecture. The
+project aims to remove the requirement for all detectors to be used for coherent post-processing
+with sky localization, and instead aims to provide a generic interface that would allow for any
+number of detectors to be used for coherent post-processing, whilst still allowing the unused
+detectors to undergo all other parts of the pipeline and remain synchronized with the used
+detectors.
+
+Should time allow, this project also aims to make the internal SPIIR interface entirely generic,
+removing the requirement for specific detectors to be used throughout the pipeline with specialized
+code. If this aim is met, the required effort for the addition or remove of detectors would be
+significantly lowered.
+
 \section{Methods}
 \section{Proposed timeline}
 \end{document}
