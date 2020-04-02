@@ -19,6 +19,7 @@ jobs:
       run: |
           mkdir output
           mv proposal/proposal.pdf output/
+          cp README.md output/index.md
     - uses: actions/upload-artifact@v1
       with:
         name: proposal.pdf
