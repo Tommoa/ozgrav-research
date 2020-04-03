@@ -115,18 +115,20 @@ searching \textendash{} the two American LIGO detectors and the Virgo detector. 
 issues with the current approach that this research project aims to address.
 
 Further detectors are likely to be coming online in the near future, with old detectors occasionally
-being removed from detection for maintainance. With the current design of the pipeline, adding and
-removing detectors is a significant undertaking that takes a substantial amount of development time.
+being removed from detection for maintainance. For example, the Japanese KAGRA detector is
+undergoing testing with the goal of being used in the next observation run, and LIGO India is
+nearing completion. With the current design of the pipeline, adding and removing detectors is a
+significant undertaking that takes a substantial amount of development time.
 
 In addition, if a detector is indeed added to SPIIR, the detector \textit{\textbf{must}} be used for
-all stages of the pipeline, and can't be used just for synchronization purposes. This presents an
-issue as additional detectors are added, as each detector has its own sensitivity, readings
+the coherent post-processing, and can't be used just for synchronization purposes. This presents an
+issue as additional detectors are added, as each detector has its own sensitivity, reading
 variations and range of observable gravitational wave frequencies, resulting in some detectors being
 suitable for searching specific frequency ranges whilst showing no discernable change in output for
 other detectors, causing many false negatives.
 
 An ideal architecture for the pipeline would be significantly more composable, able to add and
-remove the usage of different detectors for varying stages of the pipeline.
+remove the usage of different detectors for post-processing with minimal effort.
 \\
 
 As such, this research project aims to complete a subsection of this idealised architecture. The
