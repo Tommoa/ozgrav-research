@@ -38,10 +38,8 @@
 \tableofcontents{}
 \newpage{}
 
-\section*{Introduction}
-\section{Background}
-
-\subsection{A brief history of gravitational waves}
+\section{Introduction}
+\subsection{Background}
 
 In 1687, Isaac Newton published his book, ``\textit{Philosophi\ae{} Naturalis Principia
 Mathematica}'', containing his law of universal gravitation:
@@ -88,31 +86,44 @@ neutron stars that were orbiting each other. After several years of measurement,
 the speed at which the stars were orbiting each other was slowing in a manner consistent with the
 predictions of the general theory of relativity, showing that gravitational waves did indeed exist.
 
-\subsection{Gravitational wave detection}
+There were several experiments performed in the 1960s and 1970s to determine methods to detect
+gravitaional waves, resulting in several large laser interferometric detectors (that is, detectors
+that use interferometry \textendash{} the phenomena by which wave superpose on each other to create
+a resultant wave \textendash{} for detection) being built throughout the early 2000s, including the
+American Laser Interferometric Gravitational-Wave Observatory (LIGO), the Italian Virgo detector,
+and the German GEO600 detector. The initial observation runs between 2002 and 2011 by the various
+detectors failed to directly detect any gravitational waves, and as such, the majority of the
+detectors began work to increase their sensitivity throughout the 2010s. The increase in detector
+sensitivity has brought success in the search for gravitational waves, with the first direct
+detection occurring on the 14th of September, 2015.
 
-Interferometry is the use of wave interference \textendash{} in which waves superpose on each other
-to create a resultant wave \textendash{} to study various phenomena. After several experiments to
-study the use of interferometry to detect gravitational waves in the 1960s and 1970s, several large
-laser interferometric detectors were built throughout the early 2000s, including the American Laser
-Interferometer Gravitational-Wave Observatory (LIGO), the Italian Virgo detector and the German
-GEO600 detector. After no direct detection of gravitational waves in the initial observation runs
-from 2002 to 2011, the majority of the detectors began work to increase their sensitivity throughout
-the 2010s. The increase in sensitivity has succeeded in the search for gravitational waves, with the
-first direct detection occurring on the 14th of September, 2015. Since then, more detectors have
-started being built, including the Japanese KAGRA detector and the Indian LIGO detector.
+Due to their design, the detectors have a significant amount of noise from sources that are not
+gravitational waves, in addition to the gravitational waves themselves having very weak signals. As
+such, a large amount of data processing needs to be done to the outputs producted by the detectors
+in order to filter and extract any possible gravitational waves. These data processors are known as
+`\textit{pipelines}', and are mostly created by research groups that are a part of the LIGO
+Scientific Collaboration. These pipelines are used throughout observation runs for real-time data
+analysis.
 
-The detectors are designed as Michelson interferometers.
-% Talk about the way that Michelson interferometers work, and how they output information
-%
-% Talk about LAL and GSTLAL
+One such pipeline is the Summed Parallel Infinite Impulse Response (SPIIR) pipeline, created by
+Shaun Hooper in 2012. The pipeline uses a number of IIR filters \textendash{} which are commonly
+used in signal processing for bandpass filtering \textendash{} to approximate possible gravitational
+wave signals for detection. The pipeline was further developed by Qi Chu in 2017, by using GPU
+acceleration techniques to increase the speed of analysis, as well implementing a method to use a
+frequentist coherent search. The pipeline is currently the fastest of all existing pipelines, and
+has participated in every observation run since November 2015, successfully detecting all events
+that were seen in more than one detector.
 
-\subsection{The SPIIR Pipeline}
-% Talk about Qi Chu's paper and the current pipeline shape
+The SPIIR pipeline uses GStreamer, a library for composing, filtering and moving around signals, in
+addition to the GStreamer LIGO Algorithm Library (\texttt{gstlal}). After receiving data from the
+detectors, the pipeline performs data conditioning and data whitening, followed by the usage of the
+IIR filters. The data is then combined for post-processing, where events are given sky localization
+and then inserted into the LIGO event database.
 
-\section{Problem Description \& Goal}
-As of \today{}, the SPIIR pipeline supports the use of three detectors for gravitational wave
-searching \textendash{} the two American LIGO detectors and the Virgo detector. There are several
-issues with the current approach that this research project aims to address.
+\subsection{Problem Description \& Goal}
+As of \today{}, the SPIIR pipeline supports the use of exactly three detectors for gravitational
+wave searching \textendash{} the two American LIGO detectors and the Virgo detector. There are
+several issues with the current pipeline design that this research project aims to address.
 
 Further detectors are likely to be coming online in the near future, with old detectors occasionally
 being removed from detection for maintainance. For example, the Japanese KAGRA detector is
@@ -136,13 +147,16 @@ project aims to remove the requirement for all detectors to be used for coherent
 with sky localization, and instead aims to provide a generic interface that would allow for any
 number of detectors to be used for coherent post-processing, whilst still allowing the unused
 detectors to undergo all other parts of the pipeline and remain synchronized with the used
-detectors.
+detectors. The project shall explore a number of different possible codebase refactorings as well as
+exploring new techniques for efficiently combining \(N\) data sources for coherent search, and shall
+measure the performance impact of the changes using a number of benchmarks.
 
 Should time allow, this project also aims to make the internal SPIIR interface entirely generic,
 removing the requirement for specific detectors to be used throughout the pipeline with specialized
 code. If this aim is met, the required effort for the addition or remove of detectors would be
 significantly lowered.
 
+\section{Literature Review}
 \section{Methods}
 \section{Proposed timeline}
 \end{document}
