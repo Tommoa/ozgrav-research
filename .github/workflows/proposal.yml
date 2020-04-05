@@ -9,12 +9,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Install Tectonic and FontAwesome
-      run: |
-          docker build . -t tectonic
-    - name: Build
-      run: |
-          docker run -v $PWD:/usr/src/tex tectonic:latest proposal/proposal.tex
+    - uses: Tommoa/tectonic-fontawesome-action@v0.1
+      with:
+        tex_path: proposal/proposal.tex
     - name: Rename
       run: |
           mkdir output
