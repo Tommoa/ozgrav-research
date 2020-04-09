@@ -157,6 +157,30 @@ code. If this aim is met, the required effort for the addition or remove of dete
 significantly lowered.
 
 \section{Literature Review}
+
+This research project aims to refactor the SPIIR pipeline codebase and explore techniques for
+combining some unknown \(N\) number of data sources for coherent search. The literature for both
+parts of the research are developing and varied.
+
+Refactoring is defined by % Murphy-Hill, Parmin, Black: How We Refactor, and How We Know It
+as the process of changing the structure of software without changing
+its behaviour. Of course, this isn't the only way to modify source code to address known issues.
+George Fairbanks offers the options of ignoring, refactoring or rewriting code as potential methods
+to deal with problems in cite, and makes several distinctions between the options. According to
+Fairbanks, the major difference between refactoring and rewriting is the process by which the code
+is modified. When refactoring, incremental changes are made to the codebase, with the major goal
+being to keep the newly written code integrated with the existing codebase and tests, as the outputs
+of a module given some inputs should still remain identical. In contrast, when rewriting, the new
+code is written using none of the existing codebase, possibly resulting in majorly different outputs
+and possibly even data flow architecture. Unlike with refactoring, existing tests might not be able
+to be leveraged, but it becomes much easier to make sweeping architectural changes to the codebase.
+
+This still leaves the third option \textendash{} ignoring the issues. Fairbanks points out that
+ignoring issues simply means that they will have to be dealt with at a later date, and contribute to
+`\textit{techinical debt}', a term coined by Ward Cunningham in cite to help explain why otherwise
+working code may need to be refactored or rewritten. The effects of technical debt itself have also
+become a part of academic research as well as a major focus of industry.
+
 \section{Methods}
 \section{Proposed timeline}
 \end{document}
