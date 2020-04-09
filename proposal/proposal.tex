@@ -121,15 +121,15 @@ IIR filters. The data is then combined for post-processing, where events are giv
 and then inserted into the LIGO event database.
 
 \subsection{Problem Description \& Goal}
-As of \today{}, the SPIIR pipeline supports the use of exactly three detectors for gravitational
+As of \today{}, the SPIIR pipeline supports the use of two or three detectors for gravitational
 wave searching \textendash{} the two American LIGO detectors and the Virgo detector. There are
 several issues with the current pipeline design that this research project aims to address.
 
 Further detectors are likely to be coming online in the near future, with old detectors occasionally
 being removed from detection for maintainance. For example, the Japanese KAGRA detector is
 undergoing testing with the goal of being used in the next observation run, and LIGO India is
-nearing completion. With the current design of the pipeline, adding and removing detectors is a
-significant undertaking that takes a substantial amount of development time.
+currently being installed. With the current design of the pipeline, adding and removing detectors is
+a significant undertaking that takes a substantial amount of development time.
 
 In addition, if a detector is indeed added to SPIIR, the detector \textit{\textbf{must}} be used for
 the coherent post-processing, and can't be used just for synchronization purposes. This presents an
