@@ -245,8 +245,8 @@ An interesting parallel can, however, be made to sorting, a very widely studied 
 science. Comparison sorts are known to have a lower bound of \(\Omega{}(n\log{n})\) number of
 comparison operations \cite{CLRS} which can be increased depending on the algorithmic inputs,
 however when implemented on a distributed network, the number of comparators per thread can be
-reduced to \(O(\log{n}^2)\) using a sorting network, which uses a fixed set of comparisons on the
-order of \(O(n\log{n}^2)\) \cite{nvidia}. By measuring the total number of comparitors, it would
+reduced to \(O(\log^2{n})\) using a sorting network, which uses a fixed set of comparisons on the
+order of \(O(n\log^2{n})\) \cite{nvidia}. By measuring the total number of comparitors, it would
 appear that the distributed algorithm is less efficient, however \cite{nvidia} notes that the
 distributed algorithm can sort more keys per second than an optimal \(O(n\log{n})\) algorithm
 running on a single thread.
