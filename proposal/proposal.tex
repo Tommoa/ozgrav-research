@@ -90,41 +90,43 @@ An implication of gravity curving spacetime is that massive accelerating objects
 remained a theory until 1974, when Russell Hulse and Joseph Taylor discovered a binary pair of
 neutron stars that were orbiting each other. After several years of measurement, they found that
 the speed at which the stars were orbiting each other was slowing in a manner consistent with the
-predictions of the general theory of relativity, showing that gravitational waves did indeed exist.
+predictions of the general theory of relativity, showing that gravitational waves did indeed exist
+\cite{GravDiscovery}.
 
 There were several experiments performed in the 1960s and 1970s to determine methods to detect
 gravitaional waves, resulting in several large laser interferometric detectors (that is, detectors
 that use interferometry \textendash{} the phenomena by which waves superpose on each other to create
 a resultant wave \textendash{} for detection) being built throughout the early 2000s, including the
-American Laser Interferometric Gravitational-Wave Observatory (LIGO), the Italian Virgo detector,
-and the German GEO600 detector. The initial observation runs between 2002 and 2011 by the various
-detectors failed to directly detect any gravitational waves, and as such, the majority of the
-detectors began work to increase their sensitivity throughout the 2010s. The increase in detector
-sensitivity has brought success in the search for gravitational waves, with the first direct
-detection occurring on the 14th of September, 2015.
+American Laser Interferometric Gravitational-Wave Observatory (LIGO) \cite{LIGO}, the Italian Virgo
+\cite{virgo} detector, and the German GEO600 detector. The initial observation runs between 2002 and
+2011 by the various detectors failed to directly detect any gravitational waves, and as such, the
+majority of the detectors began work to increase their sensitivity throughout the 2010s
+\cite{aligo}.  The increase in detector sensitivity has brought success in the search for
+gravitational waves, with the first direct detection occurring on the 14th of September, 2015
+\cite{FirstDetectionPaper}\cite{DetectionWeb}.
 
 Due to their design, the detectors have a significant amount of noise from sources that are not
 gravitational waves, in addition to the gravitational waves themselves having very weak signals. As
 such, a large amount of data processing needs to be done to the outputs produced by the detectors
 in order to filter and extract any possible gravitational waves. These data processors are known as
 `\textit{pipelines}', and are mostly created by research groups that are a part of the LIGO
-Scientific Collaboration. These pipelines are used throughout observation runs for real-time data
-analysis.
+Scientific Collaboration \cite{LSC}. These pipelines are used throughout observation runs for
+real-time data analysis.
 
 One such pipeline is the Summed Parallel Infinite Impulse Response (SPIIR) pipeline, created by
-Shaun Hooper in 2012. The pipeline uses a number of IIR filters \textendash{} which are commonly
-used in signal processing for bandpass filtering \textendash{} to approximate possible gravitational
-wave signals for detection. The pipeline was further developed by Qi Chu in 2017, by using GPU
-acceleration techniques to increase the speed of analysis, as well implementing a method to use a
-frequentist coherent search. The pipeline is currently the fastest of all existing pipelines, and
-has participated in every observation run since November 2015, successfully detecting all events
-that were seen in more than one detector.
+Shaun Hooper in 2012 \cite{SPIIRCreate}. The pipeline uses a number of IIR filters \textendash{}
+which are commonly used in signal processing for bandpass filtering \textendash{} to approximate
+possible gravitational wave signals for detection. The pipeline was further developed by Qi Chu in
+2017, by using GPU acceleration techniques to increase the speed of analysis, as well implementing
+a method to use a frequentist coherent search \cite{ChuThesis}. The pipeline is currently the
+fastest of all existing pipelines, and has participated in every observation run since November
+2015, successfully detecting all events that were seen in more than one detector.
 
 The SPIIR pipeline uses GStreamer, a library for composing, filtering and moving around signals, in
 addition to the GStreamer LIGO Algorithm Library (\texttt{gstlal}). After receiving data from the
 detectors, the pipeline performs data conditioning and data whitening, followed by the usage of the
 IIR filters. The data is then combined for post-processing, where events are given sky localization
-and then inserted into the LIGO event database.
+and then inserted into the LIGO event database \cite{SPIIRGPU2018}.
 
 \subsection{Problem Description \& Goal}
 As of \today{}, the SPIIR pipeline supports the use of two or three detectors for gravitational
