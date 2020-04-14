@@ -10,6 +10,12 @@
 \usepackage{lastpage}
 \usepackage{setspace}
 \usepackage{amsmath}
+\usepackage[
+    backend=bibtex,
+    style=numeric,
+    sorting=ynt
+]{biblatex}
+\addbibresource{bibliography.bib}
 
 \onehalfspacing
 
@@ -162,25 +168,44 @@ This research project aims to refactor the SPIIR pipeline codebase and explore t
 combining some unknown \(N\) number of data sources for coherent search. The literature for both
 parts of the research are developing and varied.
 
-Refactoring is defined by % Murphy-Hill, Parmin, Black: How We Refactor, and How We Know It
-as the process of changing the structure of software without changing
-its behaviour. Of course, this isn't the only way to modify source code to address known issues.
-George Fairbanks offers the options of ignoring, refactoring or rewriting code as potential methods
-to deal with problems in cite, and makes several distinctions between the options. According to
-Fairbanks, the major difference between refactoring and rewriting is the process by which the code
-is modified. When refactoring, incremental changes are made to the codebase, with the major goal
-being to keep the newly written code integrated with the existing codebase and tests, as the outputs
-of a module given some inputs should still remain identical. In contrast, when rewriting, the new
-code is written using none of the existing codebase, possibly resulting in majorly different outputs
-and possibly even data flow architecture. Unlike with refactoring, existing tests might not be able
-to be leveraged, but it becomes much easier to make sweeping architectural changes to the codebase.
+\\
+
+Refactoring is defined by \cite{Murphy} as the process of changing the structure of software without
+changing its behaviour. Of course, this isn't the only way to modify source code to address known
+issues. George Fairbanks offers the options of ignoring, refactoring or rewriting code as potential
+methods to deal with problems in \cite{Fairbanks}, and makes several distinctions between the
+options. According to Fairbanks, the major difference between refactoring and rewriting is the
+process by which the code is modified. When refactoring, incremental changes are made to the
+odebase, with the major goal being to keep the newly written code integrated with the existing
+codebase and tests, as the outputs of a module given some inputs should still remain identical. In
+contrast, when rewriting, the new code is written using none of the existing codebase, possibly
+resulting in majorly different outputs and possibly even data flow architecture. Unlike with
+refactoring, existing tests might not be able to be leveraged, but it becomes much easier to make
+sweeping architectural changes to the codebase.
 
 This still leaves the third option \textendash{} ignoring the issues. Fairbanks points out that
 ignoring issues simply means that they will have to be dealt with at a later date, and contribute to
-`\textit{techinical debt}', a term coined by Ward Cunningham in cite to help explain why otherwise
-working code may need to be refactored or rewritten. The effects of technical debt itself have also
-become a part of academic research as well as a major focus of industry.
+`\textit{techinical debt}' \textendash{} a term coined by Ward Cunningham in \cite{Cunningham} to
+help explain why otherwise working code may need to be refactored or rewritten, and has since turned
+into its own area of academic research, as well as a major focus of industry. Some examples of
+activities that ``accrue'' technical debt are; a lack of documentation, implementing sub-optimal
+algorithms and a lack of testing. \cite{Allman} notes that technical debt has a number of
+similarities to financial debt, in that there can be advantages and disadvantages to accruing the
+debt. One such advantage, is that the codebase can be shipped without being entirely complete, and
+may indeed reach functional completeness in a shorter time than if the technical debt was not
+accrued. Some potential disadvantages, however, include faults in the system, increased maintainance
+and extensibility effort, as well as increased time onboarding new members of staff.
+
+Technical debt, then, is clearly an area that needs to be managed over the course of a programming
+project, even when rewriting or refactoring. \cite{Fairley} notes that whilst rewriting or reworking
+an existing codebase can reduce or eliminate technical debt, the project also risks accumulating
+additional debt if not correctly managed. To help with management, \cite{Fairley} suggests adopting
+a development process that includes regularly reviewing expected and actual progress, whilst
+\cite{Allman} encourages regular internal and external documentation, as well as maintaining an
+index of prioritised debts.
 
 \section{Methods}
 \section{Proposed timeline}
+\section{Bibliography}
+\printbibliography{}
 \end{document}
