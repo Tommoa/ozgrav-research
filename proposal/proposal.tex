@@ -202,6 +202,60 @@ additional debt if not correctly managed. To help with management, \cite{Fairley
 a development process that includes regularly reviewing expected and actual progress, whilst
 \cite{Allman} encourages regular internal and external documentation, as well as maintaining an
 index of prioritised debts.
+\\
+
+The SPIIR pipeline uses a group of IIR (infinite impulse response) filters with time delays to
+approximate a matched filter. \cite{SPIIRGPU2018} states that the output of the \(i\)th IIR filter
+can be expressed with the equation:
+
+\begin{equation}
+    y^i_k = a^i_1y^i_{k-1} + b^i_0x_{k-d_i}
+\end{equation}
+
+where \(a^i_1\) and \(b^i_0\) are coefficients, \(k\) is time in a discrete form and \(x_{k-d_i}\)
+denotes input with some time delay \(d_i\). After summing the output of the filters, the resulting
+signal undergoes coherent post-processing to determine the likelihood of an event having occurred.
+
+Coherent post-processing was introducted in \cite{ChuThesis} as an alternative to coincidence
+post-processing. \cite{ChuThesis} states that the multi-detector maximum log likelihood ratio to be
+equal to the coherent signal to noise ratio \(\rho{}^2_c\), which can be expressed as:
+
+\begin{equation}
+    \rho^2_c = \underset{max\{A_{jk},\theta,t_{c},\alpha,\delta\}}{\ln \mathcal{L}_{NW}}
+\end{equation}
+
+where \(A_{jk}\) describes the relative inclination of the detector to the source, \(\theta\) is the
+mass of the source, \(\alpha\) and \(\beta\) are the sky directions of the source and
+\(\mathcal{L}_{NW}\) is the network log likelihood network.
+
+Whilst SPIIR's coherent search currently only supports the use of two or three detectors,
+\cite{ChuThesis} estimates the computational cost of the coherent search to be:
+
+\begin{equation}
+    O(2N^3_dN_mN_p)
+\end{equation}
+
+where \(N_d\) is the number of detectors, \(N_m\) is the number of sets of IIR filters, and \(N_p\)
+is the number of sky locations. \cite{SPIIRGPU2018} discusses a number of optimizations made to the
+pipeline, including in sections of the coherent post-processing, but only reduced constant factors
+and not the computational cost of the overall process. As such, as more detectors are introduced,
+the computational time for coherent search increases cubically.
+
+An interesting parallel can, however, be made to sorting, a very widely studied area of computer
+science. Comparison sorts are known to have a lower bound of \(\Omega{}(n\log{n})\) number of
+comparison operations \cite{CLRS} which can be increased depending on the algorithmic inputs,
+however when implemented on a distributed network, the number of comparators per thread can be
+reduced to \(O(\log{}^2n)\) using a sorting network, which uses a fixed set of comparisons on the
+order of \(O(n\ln{}^2n)\) \cite{nvidia}. By measuring the total number of comparitors, it would
+appear that the distributed algorithm is less efficient, however \cite{nvidia} notes that the
+distributed algorithm can sort more keys per second than an optimal \(O(n\ln{n})\) algorithm running
+on a single thread.
+
+The SPIIR coherent search is distributed on a number of GPUs using CUDA \cite{SPIIRGPU2018}, however
+the computational cost in \cite{ChuThesis} is computed as being on the order of the number of
+computations, not the number of computation per thread. It is therefore possible that the
+computational cost per thread is different to the overall computational cost, and thus as detectors
+are added using the existing algorithm, the growth of the computational runtime may not be cubic.
 
 \section{Methods}
 \section{Proposed timeline}
