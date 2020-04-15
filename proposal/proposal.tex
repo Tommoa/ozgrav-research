@@ -12,6 +12,7 @@
 \usepackage{amsmath}
 \usepackage[yyyymmdd]{datetime}
 \usepackage{longtable}
+\usepackage[table, xcdraw]{xcolor}
 \usepackage[
     backend=bibtex,
     style=numeric,
@@ -269,6 +270,29 @@ are added using the existing algorithm, the growth of the computational runtime 
 
 \section{Methods}
 \section{Proposed timeline}
+
+\begin{center}
+    \begin{longtable}{|p{0.3\textwidth}|p{0.3\textwidth}|p{0.4\textwidth}|} \hline
+        \rowcolor[HTML]{454545}
+        {\color[HTML]{EFEFEF} \textbf{Task} } & {\color[HTML]{EFEFEF} \textbf{Time} }
+        & {\color[HTML]{EFEFEF} \textbf{Description} } \\ \hline
+        Proposal Writing (Due 2020-04-20) & 2020-03 to 2020-04 & Write research proposal. \\ \hline
+        Literature Review & 2020-04 to 2020-06 & Investigate efficient coherent search methods \\
+        \hline
+        Analyse Existing Codebase & 2020-04 to 2020-07 & Determine expected inputs and outputs of
+        coherent search methods and determine per-thread computational cost \\ \hline
+        Oral Progress Report (Due 2020-05-22) & 2020-05 & Give report detailing progress on
+        research \\ \hline
+        Refactor Existing Codebase & 2020-06 to 2020-08 & Perform changes on pipeline \\ \hline
+        Validate New Pipeline & 2020-08 & Compare outputs from changed pipeline to the previous
+        version to ensure there is not a regression of results \\ \hline
+        Measure Performance Differences & 2020-08 & Determine performance cost of changes \\ \hline
+        Abstract & 2020-08 to 2020-09 & Prepare and submit research abstract \\ \hline
+        Seminar & 2020-09 to 2020-10 & Prepare and give seminar on research \\ \hline
+        Paper Writing & 2020-09 to 2020-10 & Prepare and submit paper on research \\ \hline
+    \end{longtable}
+\end{center}
+
 \printbibliography[
     heading=bibintoc,
     title={Bibliography}
