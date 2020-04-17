@@ -265,7 +265,47 @@ computations, not the number of computation per thread. It is therefore possible
 computational cost per thread is different to the overall computational cost, and thus as detectors
 are added using the existing algorithm, the growth of the computational runtime may not be cubic.
 
-\section{Methods}
+\section{Methods} \label{sec:method}
+
+The process for development will follow the suggested method in \cite{Fairley} to minimize
+technical debt. The gravitational wave research group at the University of Western Australia meets
+once a week to present progress reports and submit the planned progress for the next week. By
+tracking the difference between planned progress and the actual progress each week, the level of
+technical debt that the project is incurring can be roughly determined. Another method by which
+technical debt can be minimized is through correct testing \cite{Allman}. Unit tests will be created
+for the coherent search function to determine the correct outputs using the existing algorithm,
+and as components are refactored, the tests will be used to ensure that there are no regressions.
+Internal and external documentation shall also be created and maintained throughout the project as
+per \cite{Allman}, with internal documentation being comments on the function of code, and
+external documentation being the methods stated in the final report.
+
+Development for the new pipeline will be performed on the OzStar cluster at Swinburne University of
+Technology \cite{ozstar}. The OzStar cluster already contains a set of sample data to run the
+pipeline on, as well as the tools for running the pipeline. As such, all testing will be performed
+on the cluster using the existing sample data.
+
+Validation of the correctness of the eventual coherent search algorithm will be an important factor
+to show that there are no behavioural regressions in the course of the project. Validation will be
+performed using a copy of the existing codebase and comparing the outputs of the coherent search
+function for equivalent inputs. If the new algorithm raises any false positives or false
+negatives that were not also seen in the existing codebase, then it can be stated that the new
+algorithm is not correct.
+
+This project will also measure the performance and computational cost difference between the 2-3
+detector specific coherent search function and the generalised coherent search function. The
+difference in computational cost will be measured by an analysis of the average case of the
+resulting algorithm and comparing it to the average case of the original coherent search function.
+The performance cost will be measured by determining the runtime of coherent search and
+comparing it across equivalent inputs for different sized inputs.
+
+\section{Expected Findings}
+
+There are a number of expected findings from this research. First, it would be expected that the
+new coherent search algorithm would replicate the outputs of the existing search algorithm for the
+same inputs (i.e. it is valid as per section \ref{sec:method}). Second, it is expected that no new
+coherent search algorithm is found, and that the generalisation of the existing algorithm results
+in a regression of less than 5\% of the current coherent search runtime.
+
 \section{Proposed timeline}
 
 \begin{center}
@@ -278,6 +318,8 @@ are added using the existing algorithm, the growth of the computational runtime 
         \hline
         Analyse Existing Codebase & 2020-04 to 2020-07 & Determine expected inputs and outputs of
         coherent search methods and determine per-thread computational cost \\ \hline
+        Determine valid unit tests & 2020-05 & Determine tests that can be used to determine the
+        correctness of coherent search algorithms \\ \hline
         Oral Progress Report (Due 2020-05-22) & 2020-05 & Give report detailing progress on
         research \\ \hline
         Refactor Existing Codebase & 2020-06 to 2020-08 & Perform changes on pipeline \\ \hline
