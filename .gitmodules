@@ -1,0 +1,4 @@
+[submodule "spiir"]
+	path = spiir
+	url = https://git.ligo.org/lscsoft/spiir.git
+	branch = master
