@@ -50,7 +50,7 @@ def combine_dot(dots: Iterator[Union[io.IOBase, str]],
     return composed
 
 
-def _parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+def parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     import sys
     parser.add_argument("--output",
                         "-o",
@@ -68,7 +68,7 @@ def _parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     return parser
 
 
-def _main(args: argparse.Namespace):
+def main(args: argparse.Namespace):
     import glob
     dots = args.inputs
     if not dots:
@@ -80,6 +80,6 @@ def _main(args: argparse.Namespace):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parsed = _parser(parser).parse_args()
-    _main(parsed)
+    argparser = argparse.ArgumentParser()
+    parsed = parser(argparser).parse_args()
+    main(parsed)

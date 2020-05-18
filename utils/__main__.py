@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import subprocess
-from .combine_dot import _parser as make_combine_parser, _main as combine_main
+from .combine_dot import parser as make_combine_parser, main as combine_main
 from .to_iir import parser as make_iir_parser, main as iir_main
 
 parser = argparse.ArgumentParser(
