@@ -50,7 +50,7 @@ def combine_dot(dots: Iterator[Union[io.IOBase, str]],
     return composed
 
 
-def _parser(parser: argparse.ArgumentParser):
+def _parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     import sys
     parser.add_argument("--output",
                         "-o",
@@ -65,6 +65,7 @@ def _parser(parser: argparse.ArgumentParser):
 
     parser.add_argument("--display", action="store_true")
     parser.description = "Combine a number of GraphViz DOT files to a single file"
+    return parser
 
 
 def _main(args: argparse.Namespace):
@@ -79,7 +80,6 @@ def _main(args: argparse.Namespace):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description="A helper program to combine `.dot` files")
+    parser = argparse.ArgumentParser()
     parsed = _parser(parser).parse_args()
     _main(parsed)
