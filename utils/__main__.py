@@ -3,6 +3,7 @@ import argparse
 import subprocess
 from .combine_dot import parser as make_combine_parser, main as combine_main
 from .to_iir import parser as make_iir_parser, main as iir_main
+from .to_dot import parser as make_dot_parser, main as dot_main
 
 parser = argparse.ArgumentParser(
         "utils",
@@ -20,6 +21,10 @@ combine_parser.set_defaults(func=combine_main)
 iir_parser = subparsers.add_parser("iir")
 make_iir_parser(iir_parser)
 iir_parser.set_defaults(func=iir_main)
+
+dot_parser = subparsers.add_parser("dot")
+make_dot_parser(dot_parser)
+dot_parser.set_defaults(func=dot_main)
 
 args = parser.parse_args()
 if args.func == parser.print_help:
