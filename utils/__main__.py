@@ -4,6 +4,7 @@ import subprocess
 from .combine_dot import parser as make_combine_parser, main as combine_main
 from .to_iir import parser as make_iir_parser, main as iir_main
 from .to_dot import parser as make_dot_parser, main as dot_main
+from .dot_pipeline import parser as make_pipeline_parser, main as pipeline_main
 
 parser = argparse.ArgumentParser(
         "utils",
@@ -25,6 +26,10 @@ iir_parser.set_defaults(func=iir_main)
 dot_parser = subparsers.add_parser("dot")
 make_dot_parser(dot_parser)
 dot_parser.set_defaults(func=dot_main)
+
+pipeline_parser = subparsers.add_parser("pipeline")
+make_pipeline_parser(pipeline_parser)
+pipeline_parser.set_defaults(func=pipeline_main)
 
 args = parser.parse_args()
 if args.func == parser.print_help:
