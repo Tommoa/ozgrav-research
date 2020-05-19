@@ -7,11 +7,18 @@ import subprocess
 from itertools import chain, repeat
 from typing import List, Tuple
 
+"""
+for file in $(ls postcoh/*.{c,cu});
+do
+clang -I /fred/oz016/gwdc_spiir_pipeline_codebase/scripts_n_things/build/master/install/include/ -I /fred/oz016/gwdc_spiir_install/dependencies/include/gstreamer-0.10/ -I /fred/oz016/gwdc_spiir_install/dependencies/include/glib-2.0/ -I /fred/oz016/gwdc_spiir_install/dependencies/lib64/glib-2.0/include/ -I /usr/include/libxml2/ -I /fred/oz016/gwdc_spiir_install/dependencies/include/ -I. -I /fred/oz016/gwdc_spiir_install/dependencies/include/ -I ../../include/ -I ../../lib/include/ -I /fred/oz016/opt/include/ --cuda-path=${CUDA_ROOT} --cuda-gpu-arch=sm_61 -S -emit-llvm $file;
+done
+"""
+
 
 def make_process(
         input_file: pathlib.Path,
         includes: List[pathlib.Path] = [],
-        cuda_path: pathlib.Path = os.getenv("CUDA_PATH") or "",
+        cuda_path: pathlib.Path = os.getenv("CUDA_ROOT") or "",
         cuda_arch: str = "sm_61",
         flags: List[str] = [],
 ) -> Tuple[pathlib.PurePath, subprocess.Popen]:
@@ -64,7 +71,7 @@ def parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument(
         "--cuda-path",
         type=pathlib.Path,
-        default=pathlib.Path(os.getenv("CUDA_PATH") or ""),
+        default=pathlib.Path(os.getenv("CUDA_ROOT") or ""),
         nargs="?")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
