@@ -21,7 +21,9 @@ def get_dot(input_file: io.IOBase) -> io.StringIO:
         "-analyze",
         "-std-link-opts",
         "-dot-callgraph"],
-        stdin=input_file)
+        stdin=input_file,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL)
     opt.wait()
     dotfile = pathlib.Path("callgraph.dot")
     ret = None
