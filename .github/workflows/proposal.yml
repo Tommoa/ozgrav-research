@@ -3,29 +3,37 @@ name: Build PDF
 on: [push]
 
 jobs:
-  build:
-
+  proposal:
+    name: Build my research proposal
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
+    - uses: actions/cache@v2
+      id: cache
+      with:
+        path: |
+          proposal/proposal.tex
+        key: proposal-${{ hashFiles('proposal/proposal.tex') }}
     - uses: Tommoa/tectonic-fontawesome-action@v0.1
+      if: steps.cache.outputs.cache-hit != 'true'
       with:
         tex_path: proposal/proposal.tex
     - name: Rename
+      if: steps.cache.outputs.cache-hit != 'true'
       run: |
           mkdir output
           mv proposal/proposal.pdf output/
           cp README.md output/index.md
     - uses: actions/upload-artifact@v1
+      if: steps.cache.outputs.cache-hit != 'true'
       with:
         name: proposal.pdf
         path: output/proposal.pdf
-    - name: Deploy to gh-pages branch
-      uses: docker://peaceiris/gh-pages:latest
-      env:
-        ACTIONS_DEPLOY_KEY: ${{ secrets.ACTIONS_DEPLOY_KEY }}
-        PUBLISH_BRANCH: gh-pages
-        PUBLISH_DIR: ./output
+    - name: Deploy to GitHub Pages
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: peaceiris/actions-gh-pages@v3
       with:
-        emptyCommits: false
+        deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+        publish_dir: ./output
+        allow_empty_commit: false
+        keep_files: true
