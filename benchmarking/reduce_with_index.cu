@@ -28,13 +28,11 @@ __device__ static inline void atomicMaxExit(float *address, float val) {
 
 /// A basic max reduce
 /// This is basically equivalent to what is done in the majority of `postcoh`
-__global__ void reduce_basic(const float *__restrict__ input, const int size,
+__global__ void reduce_naive(const float *__restrict__ input, const int size,
                              float *out, int *index_out) {
     float cur;
     float max = 0.0;
     int index = 0;
-    // for (int i = threadIdx.x*blockDim.x; i < (threadIdx.x+1)*blockDim.x; i
-    // ++) {
     for (int i = threadIdx.x; i < size; i += blockDim.x) {
         cur = input[i];
         if (cur > max) {
@@ -43,6 +41,46 @@ __global__ void reduce_basic(const float *__restrict__ input, const int size,
         }
     }
     atomicMax(out, max);
+    __syncthreads();
+    if (max == *out) {
+        *index_out = index;
+    }
+}
+
+__global__ void reduce_basic(const float *__restrict__ input, const int size,
+                             float *out, int *index_out) {
+    float cur;
+    float max = 0.0;
+    int index = 0;
+    for (int i = threadIdx.x * blockDim.x; i < (threadIdx.x + 1) * blockDim.x;
+         i++) {
+        cur = input[i];
+        if (cur > max) {
+            index = i;
+            max = cur;
+        }
+    }
+    atomicMax(out, max);
+    __syncthreads();
+    if (max == *out) {
+        *index_out = index;
+    }
+}
+
+__global__ void reduce_basic_exit(const float *__restrict__ input, const int size,
+                             float *out, int *index_out) {
+    float cur;
+    float max = 0.0;
+    int index = 0;
+    for (int i = threadIdx.x * blockDim.x; i < (threadIdx.x + 1) * blockDim.x;
+         i++) {
+        cur = input[i];
+        if (cur > max) {
+            index = i;
+            max = cur;
+        }
+    }
+    atomicMaxExit(out, max);
     __syncthreads();
     if (max == *out) {
         *index_out = index;
@@ -187,8 +225,22 @@ int main(int argc, char **argv) {
 
     gpu::check_memory();
 
+    gpu::benchmark(iterations, "reduce_naive", [&]() {
+        reduce_naive<<<1, 1024>>>(input.data(), input.size(), output.data(),
+                                  output_index.data());
+        GPUASSERT(cudaGetLastError());
+        GPUASSERT(cudaDeviceSynchronize());
+    });
+
     gpu::benchmark(iterations, "reduce_basic", [&]() {
         reduce_basic<<<1, 1024>>>(input.data(), input.size(), output.data(),
+                                  output_index.data());
+        GPUASSERT(cudaGetLastError());
+        GPUASSERT(cudaDeviceSynchronize());
+    });
+
+    gpu::benchmark(iterations, "reduce_basic_exit", [&]() {
+        reduce_basic_exit<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                   output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
