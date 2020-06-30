@@ -58,8 +58,8 @@ __global__ void reduce_shared(const float *__restrict__ input, const int size,
     for (int i = threadIdx.x; i < size; i += blockDim.x) {
         float val = input[i];
 
-        if (max < abs(val)) {
-            max = abs(val);
+        if (max < val) {
+            max = val;
             index = i;
         }
     }
@@ -129,8 +129,8 @@ __global__ void reduce_warp(const float *__restrict__ input, const int size,
     for (int i = threadIdx.x; i < size; i += blockDim.x) {
         float val = input[i];
 
-        if (local_max < abs(val)) {
-            local_max = abs(val);
+        if (local_max < val) {
+            local_max = val;
             index = i;
         }
     }
