@@ -1,5 +1,6 @@
 #include "gpu.hpp"
 
+#include <__clang_cuda_runtime_wrapper.h>
 #include <algorithm>
 #include <assert.h>
 #include <cuda_profiler_api.h>
@@ -181,17 +182,15 @@ __global__ void reduce_warp(const float *__restrict__ input, const int size,
         }
     }
 
-    const unsigned int MASK = 0xffffffff;
-    float warp_max = 0.0;
+    const unsigned int MASK = -1;
+    float warp_max = local_max;
     for (int mask = (warpSize >> 1); mask > 0; mask >>= 1) {
-        warp_max = max(local_max, __shfl_xor_sync(MASK, local_max, mask));
+        warp_max = max(warp_max, __shfl_xor_sync(MASK, warp_max, mask));
     }
     unsigned int mask = __ballot_sync(MASK, local_max == warp_max);
-    int lane = 0;
-    for (; !(mask & 1); ++lane, mask >>= 1)
-        ;
-    index = __shfl_sync(MASK, index, lane);
+    index = __shfl_sync(MASK, index, __ffs(mask) - 1);
 
+    int lane = 0;
     lane = threadIdx.x & (warpSize - 1);
 
     if (lane == 0) {
@@ -284,7 +283,9 @@ int main(int argc, char **argv) {
     });
     std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
     assert(output[0] == actual_max);
-    output[0] = -1;
+    for (auto &a : output) {
+        a = -1;
+    }
 
     next = gpu::benchmark(iterations, "reduce_warp", [&]() {
         reduce_warp<<<4, 1024>>>(input.data(), input.size(), output.data(),
@@ -293,5 +294,5 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaDeviceSynchronize());
     });
     std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
-    assert(output[0] == actual_max);
+    assert(*std::max_element(output.begin(), output.end()) == actual_max);
 }
