@@ -1,0 +1,7 @@
+--cuda-gpu-arch=sm_61
+--std=c++14
+-pthread
+-lrt
+-ldl
+-lcudart
+-L/usr/lib/cuda/
