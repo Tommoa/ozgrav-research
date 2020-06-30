@@ -26,6 +26,8 @@ __global__ void reduce_basic(const float *__restrict__ input, const int size,
     float cur;
     float max = 0.0;
     int index = 0;
+    // for (int i = threadIdx.x*blockDim.x; i < (threadIdx.x+1)*blockDim.x; i
+    // ++) {
     for (int i = threadIdx.x; i < size; i += blockDim.x) {
         cur = input[i];
         if (cur > max) {
@@ -142,10 +144,11 @@ __global__ void reduce_warp(const float *__restrict__ input, const int size,
     }
     unsigned int mask = __ballot_sync(MASK, local_max == warp_max);
     int lane = 0;
-    for (; !(mask&1); ++lane, mask>>=1);
+    for (; !(mask & 1); ++lane, mask >>= 1)
+        ;
     index = __shfl_sync(MASK, index, lane);
 
-    lane = threadIdx.x & (warpSize-1);
+    lane = threadIdx.x & (warpSize - 1);
 
     if (lane == 0) {
         int warp_index = threadIdx.x / warpSize;
@@ -200,7 +203,7 @@ int main(int argc, char **argv) {
 
     gpu::benchmark(iterations, "reduce_warp", [&]() {
         reduce_warp<<<4, 1024>>>(input.data(), input.size(), output.data(),
-                                   output_index.data());
+                                 output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
