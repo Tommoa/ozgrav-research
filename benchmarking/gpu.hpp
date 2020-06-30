@@ -5,6 +5,14 @@
 #include <thrust/system_error.h>
 #include <vector>
 
+#ifdef DEBUG
+#ifndef __syncthreads
+#include <assert.h>
+#define __syncthreads()                                                        \
+    { assert(false); }
+#endif
+#endif
+
 namespace gpu {
 /// A custom allocator class to allocate memory on the GPU
 template <class T> class Allocator {

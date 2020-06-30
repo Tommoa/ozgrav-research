@@ -5,3 +5,4 @@
 -ldl
 -lcudart
 -L/usr/lib/cuda/
+-D DEBUG
