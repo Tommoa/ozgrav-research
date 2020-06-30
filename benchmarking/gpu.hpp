@@ -73,7 +73,14 @@ void check_memory() {
     std::cerr << "Used (MB): " << total_megabytes - free_megabytes << '\n';
 }
 
-void gpu_assert(cudaError_t code, const char *file, int line, bool abort = true) {
+void get_info() {
+    cudaDeviceProp properties;
+    cudaGetDeviceProperties(&properties, 0);
+    std::cerr << "Device: " << properties.name << std::endl;
+}
+
+void gpu_assert(cudaError_t code, const char *file, int line,
+                bool abort = true) {
     if (code != cudaSuccess) {
         std::cerr << "GPU failed assertion: " << cudaGetErrorString(code)
                   << '\n';
