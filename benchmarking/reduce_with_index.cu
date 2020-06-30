@@ -155,6 +155,7 @@ __global__ void reduce_warp(const float *__restrict__ input, const int size,
 }
 
 int main(int argc, char **argv) {
+    gpu::get_info();
     const long long N = 25600000;
     const int iterations = 1000;
 
