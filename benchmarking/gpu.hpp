@@ -73,9 +73,9 @@ void check_memory() {
     std::cerr << "Used (MB): " << total_megabytes - free_megabytes << '\n';
 }
 
-void get_info() {
+void get_info(int index = 0) {
     cudaDeviceProp properties;
-    cudaGetDeviceProperties(&properties, 0);
+    cudaGetDeviceProperties(&properties, index);
     std::cerr << "Device: " << properties.name << std::endl;
 }
 
