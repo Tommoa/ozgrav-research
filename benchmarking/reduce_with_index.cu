@@ -225,45 +225,55 @@ int main(int argc, char **argv) {
 
     gpu::check_memory();
 
-    gpu::benchmark(iterations, "reduce_naive", [&]() {
+    auto bench = [&](double baseline, double other) {
+        return ((other-baseline)/(other+baseline))*100;
+    };
+
+    auto baseline = gpu::benchmark(iterations, "reduce_naive", [&]() {
         reduce_naive<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                   output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
+    std::cout << baseline << std::endl;
 
-    gpu::benchmark(iterations, "reduce_basic", [&]() {
+    auto next = gpu::benchmark(iterations, "reduce_basic", [&]() {
         reduce_basic<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                   output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
+    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
 
-    gpu::benchmark(iterations, "reduce_basic_exit", [&]() {
+    next = gpu::benchmark(iterations, "reduce_basic_exit", [&]() {
         reduce_basic_exit<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                   output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
+    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
 
-    gpu::benchmark(iterations, "reduce_shared", [&]() {
+    next = gpu::benchmark(iterations, "reduce_shared", [&]() {
         reduce_shared<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                    output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
+    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
 
-    gpu::benchmark(iterations, "reduce_blocks", [&]() {
+    next = gpu::benchmark(iterations, "reduce_blocks", [&]() {
         reduce_blocks<<<4, 1024>>>(input.data(), input.size(), output.data(),
                                    output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
+    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
 
-    gpu::benchmark(iterations, "reduce_warp", [&]() {
+    next = gpu::benchmark(iterations, "reduce_warp", [&]() {
         reduce_warp<<<4, 1024>>>(input.data(), input.size(), output.data(),
                                  output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
+    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
 }

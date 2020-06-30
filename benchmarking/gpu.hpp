@@ -93,14 +93,15 @@ void gpu_assert(cudaError_t code, const char *file, int line,
 }
 
 template <typename F>
-void benchmark(int iterations, const std::string mode, F &&function) {
+double benchmark(int iterations, const std::string mode, F &&function) {
     auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < iterations; ++i) {
         function();
     }
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> diff = end - start;
-    std::cout << mode << ": " << diff.count() << std::endl;
+    std::cout << mode << ": ";
+    return diff.count();
 }
 
 #define GPUASSERT(code)                                                        \
