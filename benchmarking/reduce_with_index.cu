@@ -8,7 +8,7 @@
 #include <random>
 
 /// AtomicMax for floats
-__device__ static inline float atomicMax(float *address, float val) {
+__device__ static inline void atomicMax(float *address, float val) {
     int *address_as_i = (int *)address;
     int old = *address_as_i, assumed;
     do {
@@ -16,7 +16,14 @@ __device__ static inline float atomicMax(float *address, float val) {
         old = atomicCAS(address_as_i, assumed,
                         __float_as_int(fmaxf(val, __int_as_float(assumed))));
     } while (assumed != old);
-    return __int_as_float(old);
+}
+
+/// An early-exit AtomicMax for floats
+__device__ static inline void atomicMaxExit(float *address, float val) {
+    if (*address >= val) {
+        return;
+    }
+    atomicMax(address, val);
 }
 
 /// A basic max reduce
