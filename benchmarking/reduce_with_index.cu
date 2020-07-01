@@ -233,6 +233,153 @@ __global__ void reduce_warp(const float *__restrict__ input, const int size,
     }
 }
 
+__global__ void reduce_chunked(const float *__restrict__ input, const int size,
+                               float *out, int *index_out) {
+    float cur;
+    float max = 0.0;
+    int index = 0;
+    int chunk = blockDim.x << 3;
+    for (int start = threadIdx.x << 3, end = (threadIdx.x + 1) << 3;
+         start < size; start += chunk, end += chunk) {
+        for (int i = start; i < end && i != size; ++i) {
+            cur = input[i];
+            if (cur > max) {
+                index = i;
+                max = cur;
+            }
+        }
+    }
+    atomicMax(out, max);
+    __syncthreads();
+    if (max == *out) {
+        *index_out = index;
+    }
+}
+
+__global__ void reduce_chunked_exit(const float *__restrict__ input,
+                                    const int size, float *out,
+                                    int *index_out) {
+    float cur;
+    float max = 0.0;
+    int index = 0;
+    int chunk = blockDim.x << 3;
+    for (int start = threadIdx.x << 3, end = (threadIdx.x + 1) << 3;
+         start < size; start += chunk, end += chunk) {
+        for (int i = start; i < end && i != size; ++i) {
+            cur = input[i];
+            if (cur > max) {
+                index = i;
+                max = cur;
+            }
+        }
+    }
+    atomicMaxExit(out, max);
+    __syncthreads();
+    if (max == *out) {
+        *index_out = index;
+    }
+}
+
+__global__ void reduce_chunked_shared(const float *__restrict__ input,
+                                      const int size, float *out,
+                                      int *index_out) {
+    __shared__ float shared_max;
+    __shared__ int shared_index;
+
+    if (0 == threadIdx.x) {
+        shared_max = 0.f;
+        shared_index = 0;
+    }
+
+    __syncthreads();
+
+    float max = 0.f;
+    int index = 0;
+
+    int chunk = blockDim.x << 3;
+    for (int start = threadIdx.x << 3, end = (threadIdx.x + 1) << 3;
+         start < size; start += chunk, end += chunk) {
+        for (int i = start; i < end && i != size; ++i) {
+            float cur = input[i];
+            if (cur > max) {
+                index = i;
+                max = cur;
+            }
+        }
+    }
+
+    atomicMax(&shared_max, max);
+
+    __syncthreads();
+
+    if (shared_max == max) {
+        shared_index = index;
+    }
+
+    __syncthreads();
+
+    if (0 == threadIdx.x) {
+        *out = shared_max;
+        *index_out = shared_index;
+    }
+}
+
+__global__ void reduce_chunked_blocks(const float *__restrict__ input,
+                                      const int size, float *out,
+                                      int *index_out) {
+    __shared__ float shared_max;
+    __shared__ int shared_index;
+
+    if (0 == threadIdx.x) {
+        shared_max = 0.f;
+        shared_index = 0;
+    }
+
+    __syncthreads();
+
+    float max = 0.f;
+    int index = 0;
+    int chunk = blockDim.x << 3;
+    for (int start = (threadIdx.x + blockIdx.x * blockDim.x) << 3,
+             end = (threadIdx.x + blockIdx.x * blockDim.x + 1) << 3;
+         start < size; start += chunk, end += chunk) {
+        for (int i = start; i < end && i != size; ++i) {
+            float cur = input[i];
+            if (cur > max) {
+                index = i;
+                max = cur;
+            }
+        }
+    }
+
+    /*
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < size;
+         i += blockDim.x) {
+        float val = input[i];
+
+        if (max < val) {
+            max = val;
+            index = i;
+        }
+    }
+    */
+
+    atomicMax(&shared_max, max);
+
+    __syncthreads();
+
+    if (shared_max == max) {
+        shared_index = index;
+    }
+
+    __syncthreads();
+
+    if (0 == threadIdx.x) {
+        out[blockIdx.x] = shared_max;
+        index_out[blockIdx.x] = shared_index;
+    }
+}
+
 auto bench(double baseline, double other) {
     return ((other - baseline) / baseline) * 100;
 }
@@ -326,6 +473,38 @@ int main(int argc, char **argv) {
     next = gpu::benchmark(iterations, "warp", [&]() {
         reduce_warp<<<4, 1024>>>(input.data(), input.size(), output.data(),
                                  output_index.data());
+        GPUASSERT(cudaGetLastError());
+        GPUASSERT(cudaDeviceSynchronize());
+    });
+    finish_benchmark(baseline, next, actual_max, output);
+
+    next = gpu::benchmark(iterations, "chunked", [&]() {
+        reduce_chunked<<<1, 1024>>>(input.data(), input.size(), output.data(),
+                                    output_index.data());
+        GPUASSERT(cudaGetLastError());
+        GPUASSERT(cudaDeviceSynchronize());
+    });
+    finish_benchmark(baseline, next, actual_max, output);
+
+    next = gpu::benchmark(iterations, "chunked_exit", [&]() {
+        reduce_chunked_exit<<<1, 1024>>>(input.data(), input.size(),
+                                         output.data(), output_index.data());
+        GPUASSERT(cudaGetLastError());
+        GPUASSERT(cudaDeviceSynchronize());
+    });
+    finish_benchmark(baseline, next, actual_max, output);
+
+    next = gpu::benchmark(iterations, "chunked_shared", [&]() {
+        reduce_chunked_shared<<<1, 1024>>>(input.data(), input.size(),
+                                           output.data(), output_index.data());
+        GPUASSERT(cudaGetLastError());
+        GPUASSERT(cudaDeviceSynchronize());
+    });
+    finish_benchmark(baseline, next, actual_max, output);
+
+    next = gpu::benchmark(iterations, "chunked_blocks", [&]() {
+        reduce_chunked_blocks<<<4, 1024>>>(input.data(), input.size(),
+                                           output.data(), output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
