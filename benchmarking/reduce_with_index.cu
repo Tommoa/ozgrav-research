@@ -3,11 +3,35 @@
 #include <__clang_cuda_runtime_wrapper.h>
 #include <algorithm>
 #include <assert.h>
+#include <cpuid.h>
 #include <cuda_profiler_api.h>
 #include <exception>
 #include <iostream>
 #include <math.h>
 #include <random>
+
+void get_cpus() {
+    char cpu_model[0x40];
+    unsigned int cpu_info[4] = {0, 0, 0, 0};
+
+    __cpuid(0x80000000, cpu_info[0], cpu_info[1], cpu_info[2], cpu_info[3]);
+    unsigned int num_cpus = cpu_info[0];
+
+    memset(cpu_model, 0, sizeof(cpu_model));
+
+    for (unsigned int i = 0x80000000; i <= num_cpus; ++i) {
+        __cpuid(i, cpu_info[0], cpu_info[1], cpu_info[2], cpu_info[3]);
+
+        if (i == 0x80000002)
+            memcpy(cpu_model, cpu_info, sizeof(cpu_info));
+        else if (i == 0x80000003)
+            memcpy(cpu_model + 16, cpu_info, sizeof(cpu_info));
+        else if (i == 0x80000004)
+            memcpy(cpu_model + 32, cpu_info, sizeof(cpu_info));
+    }
+
+    std::cerr << "CPU: " << cpu_model << std::endl;
+}
 
 /// AtomicMax for floats
 __device__ static inline void atomicMax(float *address, float val) {
@@ -201,6 +225,7 @@ __global__ void reduce_warp(const float *__restrict__ input, const int size,
 }
 
 int main(int argc, char **argv) {
+    get_cpus();
     gpu::get_info();
     const long long N = 25600000;
     const int iterations = 1000;
