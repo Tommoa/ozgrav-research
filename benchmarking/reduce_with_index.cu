@@ -1,11 +1,11 @@
 #include "gpu.hpp"
 
-#include <__clang_cuda_runtime_wrapper.h>
 #include <algorithm>
 #include <assert.h>
 #include <cpuid.h>
 #include <cuda_profiler_api.h>
 #include <exception>
+#include <execution>
 #include <iostream>
 #include <math.h>
 #include <random>
@@ -257,13 +257,24 @@ int main(int argc, char **argv) {
     auto standard = std::max_element(input.begin(), input.end());
     auto pos = standard - input.begin();
     auto actual_max = *standard;
-    auto baseline = gpu::benchmark(iterations, "cpu_naive", [&]() {
-        auto standard = std::max_element(input.begin(), input.end());
+    auto baseline = gpu::benchmark(iterations, "cpu_sequential", [&]() {
+        asm volatile("" : : : "memory");
+        auto standard =
+            std::max_element(std::execution::seq, input.begin(), input.end());
         actual_max = *standard;
+        asm volatile("" : : "g"(standard) : "memory");
     });
     std::cout << baseline << std::endl;
 
-    auto next = gpu::benchmark(iterations, "reduce_naive", [&]() {
+    auto next = gpu::benchmark(iterations, "cpu_parallel", [&]() {
+        auto standard =
+            std::max_element(std::execution::par, input.begin(), input.end());
+        actual_max = *standard;
+        asm volatile("" : : : "memory");
+    });
+    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
+
+    next = gpu::benchmark(iterations, "reduce_naive", [&]() {
         reduce_naive<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                   output_index.data());
         GPUASSERT(cudaGetLastError());
