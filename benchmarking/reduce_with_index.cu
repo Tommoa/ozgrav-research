@@ -78,7 +78,9 @@ __global__ void reduce_basic(const float *__restrict__ input, const int size,
     float cur;
     float max = 0.0;
     int index = 0;
-    for (int i = threadIdx.x; i < size; i += blockDim.x) {
+    int chunk_size = (size / blockDim.x) + 1;
+    for (int i = threadIdx.x * chunk_size;
+         i < chunk_size * (threadIdx.x + 1) && i < size; ++i) {
         cur = input[i];
         if (cur > max) {
             index = i;
