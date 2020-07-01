@@ -251,7 +251,7 @@ int main(int argc, char **argv) {
     gpu::check_memory();
 
     auto bench = [&](double baseline, double other) {
-        return ((other - baseline) / (other + baseline)) * 100;
+        return ((other - baseline) / baseline) * 100;
     };
 
     auto standard = std::max_element(input.begin(), input.end());
