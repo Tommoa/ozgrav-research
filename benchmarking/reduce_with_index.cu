@@ -31,6 +31,13 @@ void get_cpus() {
     }
 
     std::cerr << "CPU: " << cpu_model << std::endl;
+
+    uint32_t eax, ebx, ecx, edx;
+    if (__get_cpuid(0x80000006, &eax, &ebx, &ecx, &edx)) {
+        std::cerr << "\tLine size: " << (ecx & 0xff)
+                  << "B, Cache Size: " << ((ecx >> 16) & 0xffff) << "KB"
+                  << std::endl;
+    }
 }
 
 /// AtomicMax for floats
