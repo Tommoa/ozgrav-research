@@ -1,6 +1,8 @@
 #pragma once
 
 #include <chrono>
+#include <iomanip>
+#include <iostream>
 #include <thrust/system/cuda/error.h>
 #include <thrust/system_error.h>
 #include <vector>
@@ -100,7 +102,7 @@ double benchmark(int iterations, const std::string mode, F &&function) {
     }
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> diff = end - start;
-    std::cout << mode << ": ";
+    std::cout << std::setw(20) << mode << ":\t";
     return diff.count();
 }
 
