@@ -233,6 +233,20 @@ __global__ void reduce_warp(const float *__restrict__ input, const int size,
     }
 }
 
+auto bench(double baseline, double other) {
+    return ((other - baseline) / baseline) * 100;
+}
+
+void finish_benchmark(double baseline, double time, float expected,
+                      gpu::Vector<float> &output) {
+    std::cout << time << "\t(" << std::showpos << bench(baseline, time) << "%)"
+              << std::noshowpos << std::endl;
+    assert(*std::max_element(output.begin(), output.end()) == expected);
+    for (auto &a : output) {
+        a = -1;
+    }
+}
+
 int main(int argc, char **argv) {
     get_cpus();
     gpu::get_info();
@@ -257,10 +271,6 @@ int main(int argc, char **argv) {
 
     gpu::check_memory();
 
-    auto bench = [&](double baseline, double other) {
-        return ((other - baseline) / baseline) * 100;
-    };
-
     auto standard = std::max_element(input.begin(), input.end());
     auto pos = standard - input.begin();
     auto actual_max = *standard;
@@ -281,63 +291,43 @@ int main(int argc, char **argv) {
     });
     std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
 
-    next = gpu::benchmark(iterations, "reduce_naive", [&]() {
+    next = gpu::benchmark(iterations, "naive", [&]() {
         reduce_naive<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                   output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
-    assert(output[0] == actual_max);
-    output[0] = -1;
+    finish_benchmark(baseline, next, actual_max, output);
 
-    next = gpu::benchmark(iterations, "reduce_basic", [&]() {
-        reduce_basic<<<1, 1024>>>(input.data(), input.size(), output.data(),
-                                  output_index.data());
-        GPUASSERT(cudaGetLastError());
-        GPUASSERT(cudaDeviceSynchronize());
-    });
-    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
-    assert(output[0] == actual_max);
-    output[0] = -1;
-
-    next = gpu::benchmark(iterations, "reduce_basic_exit", [&]() {
+    next = gpu::benchmark(iterations, "early_exit", [&]() {
         reduce_basic_exit<<<1, 1024>>>(input.data(), input.size(),
                                        output.data(), output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
-    assert(output[0] == actual_max);
-    output[0] = -1;
+    finish_benchmark(baseline, next, actual_max, output);
 
-    next = gpu::benchmark(iterations, "reduce_shared", [&]() {
+    next = gpu::benchmark(iterations, "shared", [&]() {
         reduce_shared<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                    output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
-    assert(output[0] == actual_max);
+    finish_benchmark(baseline, next, actual_max, output);
 
-    next = gpu::benchmark(iterations, "reduce_blocks", [&]() {
+    next = gpu::benchmark(iterations, "blocks", [&]() {
         reduce_blocks<<<4, 1024>>>(input.data(), input.size(), output.data(),
                                    output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
-    assert(output[0] == actual_max);
-    for (auto &a : output) {
-        a = -1;
-    }
+    finish_benchmark(baseline, next, actual_max, output);
 
-    next = gpu::benchmark(iterations, "reduce_warp", [&]() {
+    next = gpu::benchmark(iterations, "warp", [&]() {
         reduce_warp<<<4, 1024>>>(input.data(), input.size(), output.data(),
                                  output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
-    assert(*std::max_element(output.begin(), output.end()) == actual_max);
+    finish_benchmark(baseline, next, actual_max, output);
 }
