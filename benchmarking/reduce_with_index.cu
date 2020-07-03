@@ -5,7 +5,9 @@
 #include <cpuid.h>
 #include <cuda_profiler_api.h>
 #include <exception>
+#if __cplusplus >= 201703L
 #include <execution>
+#endif
 #include <iostream>
 #include <math.h>
 #include <random>
@@ -424,19 +426,22 @@ int main(int argc, char **argv) {
     auto baseline = gpu::benchmark(iterations, "cpu_sequential", [&]() {
         asm volatile("" : : : "memory");
         auto standard =
-            std::max_element(std::execution::seq, input.begin(), input.end());
+            std::max_element(input.begin(), input.end());
         actual_max = *standard;
         asm volatile("" : : "g"(standard) : "memory");
     });
     std::cout << baseline << std::endl;
 
-    auto next = gpu::benchmark(iterations, "cpu_parallel", [&]() {
+    double next;
+#if __cplusplus >= 201703L
+    next = gpu::benchmark(iterations, "cpu_parallel", [&]() {
         auto standard =
             std::max_element(std::execution::par, input.begin(), input.end());
         actual_max = *standard;
         asm volatile("" : : : "memory");
     });
     std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
+#endif
 
     next = gpu::benchmark(iterations, "naive", [&]() {
         reduce_naive<<<1, 1024>>>(input.data(), input.size(), output.data(),
