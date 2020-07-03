@@ -11,6 +11,7 @@
 #include <iostream>
 #include <math.h>
 #include <random>
+#include <thread>
 
 void get_cpus() {
     char cpu_model[0x40];
@@ -33,6 +34,8 @@ void get_cpus() {
     }
 
     std::cerr << "CPU: " << cpu_model << std::endl;
+    std::cerr << "\t" << std::thread::hardware_concurrency() << " threads"
+              << std::endl;
 
     uint32_t eax, ebx, ecx, edx;
     if (__get_cpuid(0x80000006, &eax, &ebx, &ecx, &edx)) {
