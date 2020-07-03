@@ -187,10 +187,9 @@ __global__ void reduce_blocks(const float *__restrict__ input, const int size,
 
     float max = 0.f;
     int index = 0;
-    int chunk = blockDim.x*gridDim.x;
+    int chunk = blockDim.x * gridDim.x;
 
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < size;
-         i += chunk) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < size; i += chunk) {
         float val = input[i];
 
         if (max < val) {
@@ -354,10 +353,11 @@ __global__ void reduce_chunked_blocks(const float *__restrict__ input,
     float max = 0.f;
     int index = 0;
     int chunk = (gridDim.x * blockDim.x) << 3;
-    for (int start = (threadIdx.x + blockIdx.x * blockDim.x) << 3,
-             end = (threadIdx.x + blockIdx.x * blockDim.x + 1) << 3;
-         start < size; start += chunk, end += chunk) {
-        for (int i = start; i < end && i != size; ++i) {
+    int start = (threadIdx.x + blockIdx.x * blockDim.x) << 3;
+    int end = start + 8;
+    for (; start < size; start += chunk, end += chunk) {
+        end = end ^ ((end ^ size) & -(end > size));// min(end, size);
+        for (int i = start; i < end; ++i) {
             float cur = input[i];
             if (cur > max) {
                 index = i;
