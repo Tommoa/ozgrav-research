@@ -98,7 +98,7 @@ __global__ void reduce_naive_nobranch(const float *__restrict__ input,
         cur = input[i];
         mask = -(max < cur);
         // x ^ ((x ^ y) & mask)
-        // gives x when mask = -1, y if mask = 0
+        // gives y when mask = -1, x if mask = 0
         index = index ^ ((index ^ i) & mask);
         // SPIIR does `max = (max + cur)*0.5 + (max - cur)*((max > cur)*0.5)
         // this would be fine except for floating point inaccuracies
