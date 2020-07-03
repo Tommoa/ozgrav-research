@@ -131,7 +131,7 @@ __global__ void reduce_basic(const float *__restrict__ input, const int size,
     }
 }
 
-__global__ void reduce_basic_exit(const float *__restrict__ input,
+__global__ void reduce_early_exit(const float *__restrict__ input,
                                   const int size, float *out, int *index_out) {
     float cur;
     float max = 0.0;
@@ -488,7 +488,7 @@ int main(int argc, char **argv) {
     finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "early_exit", [&]() {
-        reduce_basic_exit<<<1, 1024>>>(input.data(), input.size(),
+        reduce_early_exit<<<1, 1024>>>(input.data(), input.size(),
                                        output.data(), output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
