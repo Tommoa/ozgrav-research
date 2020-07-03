@@ -110,27 +110,6 @@ __global__ void reduce_naive_nobranch(const float *__restrict__ input,
     }
 }
 
-__global__ void reduce_basic(const float *__restrict__ input, const int size,
-                             float *out, int *index_out) {
-    float cur;
-    float max = 0.0;
-    int index = 0;
-    int chunk_size = (size / blockDim.x) + 1;
-    for (int i = threadIdx.x * chunk_size;
-         i < chunk_size * (threadIdx.x + 1) && i < size; ++i) {
-        cur = input[i];
-        if (cur > max) {
-            index = i;
-            max = cur;
-        }
-    }
-    atomicMax(out, max);
-    __syncthreads();
-    if (max == *out) {
-        *index_out = index;
-    }
-}
-
 __global__ void reduce_early_exit(const float *__restrict__ input,
                                   const int size, float *out, int *index_out) {
     float cur;
