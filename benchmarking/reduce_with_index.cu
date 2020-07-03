@@ -453,8 +453,7 @@ int main(int argc, char **argv) {
     auto actual_max = *standard;
     auto baseline = gpu::benchmark(iterations, "cpu_sequential", [&]() {
         asm volatile("" : : : "memory");
-        auto standard =
-            std::max_element(input.begin(), input.end());
+        auto standard = std::max_element(input.begin(), input.end());
         actual_max = *standard;
         asm volatile("" : : "g"(standard) : "memory");
     });
