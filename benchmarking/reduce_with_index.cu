@@ -82,6 +82,34 @@ __global__ void reduce_naive(const float *__restrict__ input, const int size,
     }
 }
 
+__global__ void reduce_naive_nobranch(const float *__restrict__ input,
+                                      const int size, float *out,
+                                      int *index_out) {
+    float max = 0.0;
+    int index = 0;
+    int tmp = reinterpret_cast<int &>(max);
+    float cur;
+    int mask;
+    for (int i = threadIdx.x; i < size; i += blockDim.x) {
+        cur = input[i];
+        mask = -(max < cur);
+        // x ^ ((x ^ y) & mask)
+        // gives x when mask = -1, y if mask = 0
+        index = index ^ ((index ^ i) & mask);
+        // SPIIR does `max = (max + cur)*0.5 + (max - cur)*((max > cur)*0.5)
+        // this would be fine except for floating point inaccuracies
+        // The below does effectively the same but by just taking the bits of
+        // the winning float
+        tmp = tmp ^ ((tmp ^ reinterpret_cast<int &>(cur)) & mask);
+        max = reinterpret_cast<float &>(tmp);
+    }
+    atomicMax(out, max);
+    __syncthreads();
+    if (max == *out) {
+        *index_out = index;
+    }
+}
+
 __global__ void reduce_basic(const float *__restrict__ input, const int size,
                              float *out, int *index_out) {
     float cur;
@@ -446,6 +474,14 @@ int main(int argc, char **argv) {
     next = gpu::benchmark(iterations, "naive", [&]() {
         reduce_naive<<<1, 1024>>>(input.data(), input.size(), output.data(),
                                   output_index.data());
+        GPUASSERT(cudaGetLastError());
+        GPUASSERT(cudaDeviceSynchronize());
+    });
+    finish_benchmark(baseline, next, actual_max, output);
+
+    next = gpu::benchmark(iterations, "nobranch", [&]() {
+        reduce_naive_nobranch<<<1, 1024>>>(input.data(), input.size(),
+                                           output.data(), output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
