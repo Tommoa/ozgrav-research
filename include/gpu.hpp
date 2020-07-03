@@ -17,13 +17,13 @@
 
 namespace gpu {
 /// A custom allocator class to allocate memory on the GPU
-template <class T> class Allocator {
+template <class T> class ManagedAllocator {
   public:
     typedef T value_type;
 
-    Allocator() {}
+    ManagedAllocator() {}
 
-    template <class U> Allocator(const Allocator<U> &) noexcept {}
+    template <class U> ManagedAllocator(const ManagedAllocator<U> &) noexcept {}
 
     [[nodiscard]] value_type *allocate(std::size_t n) {
         value_type *result = nullptr;
@@ -33,7 +33,7 @@ template <class T> class Allocator {
         if (e != cudaSuccess) {
             throw thrust::system_error(
                 e, thrust::cuda_category(),
-                "GpuAllocator::allocate(): cudaMallocManaged");
+                "ManagedAllocator::allocate(): cudaMallocManaged");
         }
 
         return result;
@@ -51,17 +51,18 @@ template <class T> class Allocator {
 };
 
 template <class T1, class T2>
-bool operator==(const Allocator<T1> &, const Allocator<T2> &) {
+bool operator==(const ManagedAllocator<T1> &, const ManagedAllocator<T2> &) {
     return true;
 }
 
 template <class T1, class T2>
-bool operator!=(const Allocator<T1> &lhs, const Allocator<T2> &rhs) {
+bool operator!=(const ManagedAllocator<T1> &lhs,
+                const ManagedAllocator<T2> &rhs) {
     return false;
 }
 
 /// A vector on the GPU
-template <class T> using Vector = std::vector<T, Allocator<T>>;
+template <class T> using Vector = std::vector<T, ManagedAllocator<T>>;
 
 void check_memory() {
     size_t free_bytes, total_bytes;
