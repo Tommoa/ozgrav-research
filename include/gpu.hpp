@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cuda_runtime_api.h>
 #include <iomanip>
 #include <iostream>
 #include <thrust/system/cuda/error.h>
@@ -80,6 +81,12 @@ void get_info(int index = 0) {
     cudaDeviceProp properties;
     cudaGetDeviceProperties(&properties, index);
     std::cerr << "Device: " << properties.name << std::endl;
+    std::cerr << "\tCompute capability: " << properties.major << "."
+              << properties.minor << std::endl;
+    std::cerr << "\tMax threads per block: " << properties.maxThreadsPerBlock
+              << std::endl;
+    std::cerr << "\tCompute units: " << properties.multiProcessorCount
+              << std::endl;
 }
 
 void gpu_assert(cudaError_t code, const char *file, int line,
