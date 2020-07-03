@@ -62,7 +62,7 @@ bool operator!=(const ManagedAllocator<T1> &lhs,
 }
 
 /// A vector on the GPU
-template <class T> using Vector = std::vector<T, ManagedAllocator<T>>;
+template <class T> using ManagedVector = std::vector<T, ManagedAllocator<T>>;
 
 void check_memory() {
     size_t free_bytes, total_bytes;

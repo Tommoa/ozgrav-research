@@ -397,7 +397,7 @@ auto bench(double baseline, double other) {
 }
 
 void finish_benchmark(double baseline, double time, float expected,
-                      gpu::Vector<float> &output) {
+                      gpu::ManagedVector<float> &output) {
     std::cout << time << "\t(" << std::showpos << bench(baseline, time) << "%)"
               << std::noshowpos << std::endl;
     assert(*std::max_element(output.begin(), output.end()) == expected);
@@ -412,9 +412,9 @@ int main(int argc, char **argv) {
     const long long N = 25600000;
     const int iterations = 1000;
 
-    gpu::Vector<float> input(N);
-    gpu::Vector<float> output(1024 / 32);
-    gpu::Vector<int> output_index(1024 / 32);
+    gpu::ManagedVector<float> input(N);
+    gpu::ManagedVector<float> output(1024 / 32);
+    gpu::ManagedVector<int> output_index(1024 / 32);
 
     std::default_random_engine engine;
     std::uniform_real_distribution<> distribution(0, 1000);
