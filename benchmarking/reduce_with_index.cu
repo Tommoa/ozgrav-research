@@ -5,6 +5,7 @@
 #include <cpuid.h>
 #include <cuda_profiler_api.h>
 #include <exception>
+#include <iomanip>
 #if __cplusplus >= 201703L
 #include <execution>
 #endif
@@ -430,6 +431,8 @@ int main(int argc, char **argv) {
     GPUASSERT(cudaDeviceSynchronize());
 
     gpu::check_memory();
+
+    std::cout << std::setprecision(5) << std::fixed << std::endl;
 
     auto standard = std::max_element(input.begin(), input.end());
     auto pos = standard - input.begin();
