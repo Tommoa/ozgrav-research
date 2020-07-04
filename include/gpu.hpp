@@ -80,7 +80,9 @@ void check_memory() {
 void get_info(int index = 0) {
     cudaDeviceProp properties;
     cudaGetDeviceProperties(&properties, index);
-    std::cerr << "Device: " << properties.name << std::endl;
+    std::cerr << "Device " << index << ": " << properties.name << std::endl;
+    std::cerr << "\tClock speed: " << ((float)properties.clockRate / 1000)
+              << "MHz" << std::endl;
     std::cerr << "\tCompute capability: " << properties.major << "."
               << properties.minor << std::endl;
     std::cerr << "\tMax threads per block: " << properties.maxThreadsPerBlock
