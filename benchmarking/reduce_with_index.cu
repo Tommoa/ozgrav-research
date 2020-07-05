@@ -1,50 +1,13 @@
+#include "cpu.hpp"
 #include "gpu.hpp"
 
 #include <algorithm>
-#include <assert.h>
-#include <cpuid.h>
 #include <cuda_profiler_api.h>
-#include <exception>
-#include <iomanip>
 #if __cplusplus >= 201703L
 #include <execution>
 #endif
 #include <iostream>
-#include <math.h>
 #include <random>
-#include <thread>
-
-void get_cpus() {
-    char cpu_model[0x40];
-    unsigned int cpu_info[4] = {0, 0, 0, 0};
-
-    __cpuid(0x80000000, cpu_info[0], cpu_info[1], cpu_info[2], cpu_info[3]);
-    unsigned int num_cpus = cpu_info[0];
-
-    memset(cpu_model, 0, sizeof(cpu_model));
-
-    for (unsigned int i = 0x80000000; i <= num_cpus; ++i) {
-        __cpuid(i, cpu_info[0], cpu_info[1], cpu_info[2], cpu_info[3]);
-
-        if (i == 0x80000002)
-            memcpy(cpu_model, cpu_info, sizeof(cpu_info));
-        else if (i == 0x80000003)
-            memcpy(cpu_model + 16, cpu_info, sizeof(cpu_info));
-        else if (i == 0x80000004)
-            memcpy(cpu_model + 32, cpu_info, sizeof(cpu_info));
-    }
-
-    std::cerr << "CPU: " << cpu_model << std::endl;
-    std::cerr << "\t" << std::thread::hardware_concurrency() << " threads"
-              << std::endl;
-
-    uint32_t eax, ebx, ecx, edx;
-    if (__get_cpuid(0x80000006, &eax, &ebx, &ecx, &edx)) {
-        std::cerr << "\tLine size: " << (ecx & 0xff)
-                  << "B, Cache Size: " << ((ecx >> 16) & 0xffff) << "KB"
-                  << std::endl;
-    }
-}
 
 /// AtomicMax for floats
 __device__ static inline void atomicMax(float *address, float val) {
@@ -356,7 +319,7 @@ __global__ void reduce_chunked_blocks(const float *__restrict__ input,
     int start = (threadIdx.x + blockIdx.x * blockDim.x) << 3;
     int end = start + 8;
     for (; start < size; start += chunk, end += chunk) {
-        end = end ^ ((end ^ size) & -(end > size));// min(end, size);
+        end = end ^ ((end ^ size) & -(end > size)); // min(end, size);
         for (int i = start; i < end; ++i) {
             float cur = input[i];
             if (cur > max) {
@@ -394,22 +357,8 @@ __global__ void reduce_chunked_blocks(const float *__restrict__ input,
     }
 }
 
-auto bench(double baseline, double other) {
-    return ((other - baseline) / baseline) * 100;
-}
-
-void finish_benchmark(double baseline, double time, float expected,
-                      gpu::ManagedVector<float> &output) {
-    std::cout << time << "\t(" << std::showpos << bench(baseline, time) << "%)"
-              << std::noshowpos << std::endl;
-    assert(*std::max_element(output.begin(), output.end()) == expected);
-    for (auto &a : output) {
-        a = -1;
-    }
-}
-
 int main(int argc, char **argv) {
-    get_cpus();
+    cpu::get_cpus();
     gpu::get_info();
     const long long N = 25600000;
     const int iterations = 1000;
@@ -432,28 +381,30 @@ int main(int argc, char **argv) {
 
     gpu::check_memory();
 
-    std::cout << std::setprecision(5) << std::fixed << std::endl;
+    std::cerr << std::endl;
+    std::cout << std::setprecision(5) << std::fixed;
 
     auto standard = std::max_element(input.begin(), input.end());
     auto pos = standard - input.begin();
     auto actual_max = *standard;
-    auto baseline = gpu::benchmark(iterations, "cpu_sequential", [&]() {
-        asm volatile("" : : : "memory");
+    auto baseline = cpu::benchmark(iterations, "cpu_sequential", [&]() {
         auto standard = std::max_element(input.begin(), input.end());
         actual_max = *standard;
-        asm volatile("" : : "g"(standard) : "memory");
+        cpu::do_not_optimize(standard);
+        cpu::clobber();
     });
     std::cout << baseline << std::endl;
 
     double next;
 #if __cplusplus >= 201703L
-    next = gpu::benchmark(iterations, "cpu_parallel", [&]() {
+    next = cpu::benchmark(iterations, "cpu_parallel", [&]() {
         auto standard =
             std::max_element(std::execution::par, input.begin(), input.end());
         actual_max = *standard;
-        asm volatile("" : : : "memory");
+        cpu::do_not_optimize(standard);
+        cpu::clobber();
     });
-    std::cout << next << "\t(" << bench(baseline, next) << "%)" << std::endl;
+    std::cout << next << "\t(" << cpu::bench(baseline, next) << "%)" << std::endl;
 #endif
 
     next = gpu::benchmark(iterations, "naive", [&]() {
@@ -462,7 +413,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "nobranch", [&]() {
         reduce_naive_nobranch<<<1, 1024>>>(input.data(), input.size(),
@@ -470,7 +421,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "early_exit", [&]() {
         reduce_early_exit<<<1, 1024>>>(input.data(), input.size(),
@@ -478,7 +429,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "shared", [&]() {
         reduce_shared<<<1, 1024>>>(input.data(), input.size(), output.data(),
@@ -486,7 +437,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "blocks", [&]() {
         reduce_blocks<<<4, 1024>>>(input.data(), input.size(), output.data(),
@@ -494,7 +445,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "warp", [&]() {
         reduce_warp<<<4, 1024>>>(input.data(), input.size(), output.data(),
@@ -502,7 +453,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "chunked", [&]() {
         reduce_chunked<<<1, 1024>>>(input.data(), input.size(), output.data(),
@@ -510,7 +461,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "chunked_exit", [&]() {
         reduce_chunked_exit<<<1, 1024>>>(input.data(), input.size(),
@@ -518,7 +469,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "chunked_shared", [&]() {
         reduce_chunked_shared<<<1, 1024>>>(input.data(), input.size(),
@@ -526,7 +477,7 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "chunked_blocks", [&]() {
         reduce_chunked_blocks<<<4, 1024>>>(input.data(), input.size(),
@@ -534,5 +485,5 @@ int main(int argc, char **argv) {
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
-    finish_benchmark(baseline, next, actual_max, output);
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 }

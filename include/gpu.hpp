@@ -1,6 +1,6 @@
 #pragma once
 
-#include <chrono>
+#include <cassert>
 #include <cuda_runtime_api.h>
 #include <iomanip>
 #include <iostream>
@@ -106,14 +106,19 @@ void gpu_assert(cudaError_t code, const char *file, int line,
 
 template <typename F>
 double benchmark(int iterations, const std::string mode, F &&function) {
-    auto start = std::chrono::steady_clock::now();
+    cudaEvent_t start, end;
+    cudaEventCreate(&start);
+    cudaEventCreate(&end);
+    cudaEventRecord(start, 0);
     for (int i = 0; i < iterations; ++i) {
         function();
     }
-    auto end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> diff = end - start;
+    cudaEventRecord(end, 0);
+    cudaEventSynchronize(end);
+    float time;
+    cudaEventElapsedTime(&time, start, end);
     std::cout << std::setw(20) << mode << ":\t";
-    return diff.count();
+    return time / 1000;
 }
 
 #define GPUASSERT(code)                                                        \

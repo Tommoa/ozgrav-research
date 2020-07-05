@@ -9,7 +9,7 @@ ODIR=obj
 LIBS=-lm -lrt -ldl -lcudart
 ELIBS=-ltbb -pthread
 
-_DEPS = gpu.hpp
+_DEPS = cpu.hpp gpu.hpp
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
 _OBJ = reduce_with_index.o
