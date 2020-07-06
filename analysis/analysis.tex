@@ -1,0 +1,80 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper]{geometry}
+\usepackage[myheadings]{fullpage}
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{sectsty}
+\usepackage{appendix}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{setspace}
+\usepackage{amsmath}
+\usepackage[yyyymmdd]{datetime}
+\usepackage{longtable}
+\usepackage[table, xcdraw]{xcolor}
+\usepackage[
+    backend=bibtex,
+    style=numeric,
+    sorting=ynt
+]{biblatex}
+\addbibresource{bibliography.bib}
+
+\renewcommand{\dateseparator}{-}
+
+\onehalfspacing
+
+\pagestyle{fancy}
+\fancyhf{}
+\setlength\headheight{15pt}
+\fancyhead[L]{Student ID: 21963144}
+\fancyhead[R]{UWA}
+\fancyfoot[R]{Page \thepage{} of \pageref{LastPage}}
+\sectionfont{\scshape}
+
+\newcommand{\HRule}[1]{\rule{\linewidth}{#1}}
+
+\title{\normalsize \textsc{GENG555X Research Project}
+        \\ [1.5cm]
+        \HRule{0.5pt} \\
+        \LARGE \textbf{\uppercase{An analysis of the computational complexity of the SPIIR pipeline}}
+        \HRule{2pt} \\ [0.5cm]
+        \normalsize \date{\today} \vspace*{3\baselineskip}}
+
+\author{Thomas Hill Almeida (21963144)\\
+\\
+Supervisor:\\
+Professor Linqing Wen
+}
+\date{}
+
+\begin{document}
+\maketitle{}
+\tableofcontents{}
+\newpage{}
+
+\section{Introduction}
+
+The Summed Parallel Infinite Impulse Response (SPIIR) pipeline, first implemented by Shaun Hooper in 2012 \cite{SPIIRCreate}, uses a number of IIR filters to approximate possible gravitational wave signals for detection followed by post-processing to localize any potential candidates.
+The pipeline is currently the fastest of all existing pipelines, and has participated in every observation run since November 2015, successfully detecting all events that were seen in more than one detector.
+
+Coherent post-processing was introducted in \cite{ChuThesis} by Qi Chu et al as an alternative to coincidence post-processing.
+\cite{ChuThesis} states that the multi-detector maximum log likelihood ratio to be equal to the coherent signal to noise ratio \(\rho{}^2_c\), which can be expressed as:
+
+\begin{equation}
+    \rho^2_c = \underset{max\{A_{jk},\theta,t_{c},\alpha,\delta\}}{\ln \mathcal{L}_{NW}},
+\end{equation}
+\\
+where \(A_{jk}\) describes the relative inclination of the detector to the source, \(\theta\) is the mass of the source, \(\alpha\) and \(\beta\) are the sky directions of the source and \(\mathcal{L}_{NW}\) is the network log likelihood network.
+
+In \cite{ChuThesis}, the computational cost of the coherent search is estimated to be \(O(2N^3_dN_mN_p)\), where \(N_d\) is the number of detectors, \(N_m\) is the number of sets of IIR filters, and \(N_p\) is the number of potential sky locations.
+Further optimizations were made to the pipeline in 2018 \cite{SPIIRGPU2018}, including moving to using GPU acceleration.
+Whilst \cite{SPIIRGPU2018} discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed and thus is currently unknown.
+
+This report aims to determine and justify the computational complexity of the existing SPIIR pipeline and provide a framework for any further analysis at a later date.
+
+\printbibliography[
+    heading=bibintoc,
+    title={Bibliography}
+]{}
+\end{document}

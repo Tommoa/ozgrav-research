@@ -69,3 +69,36 @@ jobs:
         publish_dir: ./output
         allow_empty_commit: false
         keep_files: true
+  analysis:
+    name: Build complexity analysis report
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/cache@v2
+      id: cache
+      with:
+        path: |
+          output/analysis.pdf
+        key: proposal-${{ hashFiles('analysis/**') }}
+    - uses: Tommoa/tectonic-fontawesome-action@master
+      if: steps.cache.outputs.cache-hit != 'true'
+      with:
+        tex_path: analysis/analysis.tex
+    - name: Rename
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+          mkdir output
+          mv analysis/analysis.pdf output/analysis.pdf
+          cp README.md output/index.md
+    - uses: actions/upload-artifact@v1
+      with:
+        name: analysis.pdf
+        path: output/analysis.pdf
+    - name: Deploy to GitHub Pages
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+        publish_dir: ./output
+        allow_empty_commit: false
+        keep_files: true
