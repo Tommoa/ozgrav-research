@@ -74,6 +74,49 @@ In addition, \cite{SPIIRGPU2018} parallelized the pipeline, leading to additiona
 
 This report aims to determine and justify the computational complexity of the existing SPIIR pipeline and provide a framework for any further analysis at a later date.
 
+\section{Background}
+
+According to \cite{CLRS}, the theoretical efficiency of a multi-threaded or parallelized algorithm can be measured using the metrics of `span', `work', `speed-up' and `parallelism', all of which should be considered in the context of a directed acyclic graph (DAG) of operations in the algorithm.
+The \textit{\textbf{work}} of a parallelized computation is the total time to execute the entire computation sequentially on a single processor, and can be found by summing the total work of every vertex in the DAG.
+In comparison, the \textit{\textbf{span}} of a parallelized computation is the maximum time taken to complete any path in the DAG.
+It should be noted that the actual running time of a parallelized computation also depends on the number of processors available for computation and how they are allocated to perform different tasks in the DAG, and thus denoting the running time of parallelized computation on \(P\) processors as \(T_P\) is also common practice.
+This leads to work being denoted at \(T_1\) (the time taken to run on a single processor) and span being denoted as \(T_\infty\) (the time taken on an infinite number of processors).
+Another helpful metric is \textit{\textbf{speed-up}}, which shows how the algorithm scales with additional processors as \(S_P = \dfrac{T_1}{T_P}\).
+We can also then define \textit{\textbf{parallelism}} as the maximum possible speed-up on any number of processors, and thus as \(p = \dfrac{T_1}{T_\infty}\).
+
+Using the above definitions, we can re-derive several laws that provide lower bounds on the running time of \(T_P\).
+
+In one step, a computer with \(P\) processors can do \(P\) units of work, and thus in \(T_P\) time can perform \(PT_P\) units of work.
+As the total work to be done as per above is \(T_1\), the \textit{\textbf{work law}} states that \cite{CLRS}:
+
+\[
+    T_P \geq \dfrac{T_1}{P}.
+\]
+
+It is also evident that a computer with \(P\) processors cannot run any faster than a computer with an infinite number of processors, as the computer with an infinite number of processors can emulate a computer with \(P\) processors by using a subset of its processors, leading to the \textit{\textbf{span law}} \cite{CLRS}:
+
+\[
+    T_P \geq T_\infty.
+\]
+
+It is also useful to use the metrics of `cost' and `efficiency' when analysing parallel algorithms \cite{brent}.
+The \textit{\textbf{cost}} of a parallel algorithm is minimised when all of processors are used at every step for useful computation and thus can be defined as \(C_P = P\times{T_P}\).
+\textit{\textbf{Efficiency}} is closely related to cost and describes speed-up per processor and can be defined as:
+
+\[
+    e_P = \dfrac{S_P}{P} = \dfrac{T_1}{C_P}.
+\]
+
+Another helpful theorem for analysis is \textit{\textbf{Brent's Theorem}}, which states that for an algorithm that can run in parallel on \(N\) processors can be executed on \(P < N\) processors in a time of approximately \cite{BrentsLaw}
+
+\[
+    T_P \leq T_N + \dfrac{T_1-T_N}{P}.
+\]
+
+This can be approximated with the upper bound of \(O(\dfrac{T_1}{P} + T_N)\) \cite{brent}.
+
+Determining the span, work, parallelism, efficiency and cost, and examining the application of Brent's theorem to the computations at hand will allow us to analyse the computational complexity of the SPIIR pipeline.
+ 
 \printbibliography[
     heading=bibintoc,
     title={Bibliography}
