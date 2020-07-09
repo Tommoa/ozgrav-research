@@ -147,6 +147,27 @@ We can also observe that using \(P = N/log N\) processors gives a \textit{\textb
 
 Functions that include maximum reduction with index preservation will be denoted for clarity with \(M(x)\), where \(x\) is the size of the array being reduced.
 
+\subsection{Determining the number of samples over a signal-to-noise threshold} \label{sec:peaks}
+
+The coherent post-processing in SPIIR determines the number of samples over a signal-to-noise (SNR) threshold in order to not do more work than is required.
+The function that is used for determining the number of samples over the threshold (\texttt{peaks\_over\_thresh}) is a sequential algorithm that runs on the CPU, and shall be analysed as such, although there is an alternative GPU-based implementation that is not used.
+
+Initially, the function performs a maximum reduction with index preservation to get the maximum SNR from the IIR templates for each sample.
+Recalling from section \ref{sec:reduce} that for maximum reduction with index preservation \(T_1 = O(N)\), and that this operation is performed \(S\) times, where \(S\) is the number of samples, we can determine that this initial reduction has a time complexity of 
+\(O(ST)\), where \(T\) is the number of templates.
+
+The function then determines the maximum SNR across the templates found from the previous step by stepping through every combination of samples and removing SNR samples that are using the same template and have a lower SNR, resulting in a step with a time complexity of \(O(S^2)\).
+
+The function then determines the maximum overall SNR for the input samples (\(O(S)\)) and cycles through every maximum SNR to cluster maximums that are close together to be a single combined maximum.
+The number of maximums is bounded by (\(O(\min\{S,T\})\)) as there cannot be more maximums than there are samples or templates.
+
+This gives the overall function a time complexity of \(O(ST + S^2 + S + \min\{S,T\})\), which can be reduced to the dominating terms of:
+
+\[
+    O(ST + S^2).
+\]
+
+
 \printbibliography[
     heading=bibintoc,
     title={Bibliography}
