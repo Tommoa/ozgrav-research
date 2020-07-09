@@ -136,12 +136,10 @@ Thus, the \textit{\textbf{parallelism}} of the reduction is:
 \]
 
 Using the span and work laws, we can observe that any algorithm using the above method is bounded by the inequalities \(O(log N) \leq T_P, \dfrac{O(N)}{P} \leq T_P\).
-This means that best possible time complexity with \(P\) processors is \(O(log N)\) (the span law) which can definitely be achieved with \(P=N\) processors, however using \(P=N\) processors results in a cost of \(C_N = N\times{log N}\), which is worse than the sequential algorithm.
-
-Taking \(T_N = T_\infty\ = O(logN)\) in \textit{\textbf{Brent's Theorem}}, we can determine that \(T_P\) has the bounds of:
-
+This means that best possible time complexity with \(P\) processors is \(O(log N)\) (the span law).
+We can determine the minimum number of processors required to achieve this runtime using the formula \(T_P = O(log N) = \dfrac{O(N)}{P}\), which can be rearranged to
 \[
-    T_P = O(\dfrac{N}{P} + log N),
+    P = \dfrac{N}{log N},
 \]
 thus the time complexity cannot improve past \(P = N/log N\) processors.
 We can also observe that using \(P = N/log N\) processors gives a \textit{\textbf{cost}} of \(C_P = N\), which is identical to the sequential algorithm.
