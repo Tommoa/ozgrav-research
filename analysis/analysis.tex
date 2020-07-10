@@ -167,6 +167,25 @@ This gives the overall function a time complexity of \(O(ST + S^2 + S + \min\{S,
     O(ST + S^2).
 \]
 
+\subsection{Transposing the input matrices} \label{sec:transpose}
+
+The full post-processing function requires that the input matrix is transposed for better memory access such that each row is a different template, and each column is a different sample.
+To transpose the matrix, the GPU function \texttt{transpose\_matrix} is used, thus this should be analysed as a parallel algorithm.
+
+The algorithm in use works by breaking the original array into tiles of size \(32\times32\), and then inserting the transpose of the tile into an output array.
+The tiles are further broken down eight processors per row, so each thread does four copies.
+We can conceptualise this as a DAG by observing that each tile does not depend on any other tile to be completed, and that each tile is composed of \(32\times8\) interdependent processors, each doing 4 units of work.
+
+Using this observation, we can see that the \textit{\textbf{span}} of the algorithm is \(T_\infty = (32\times8)\times4 = O(1024) = O(1)\), and the \textit{\textbf{work}} is \(T_1 = O(ST)\), where \(S\) is the number of samples and \(T\) is the number of templates.
+Thus, the \textit{\textbf{parallelism}} of the transpose is \(p = ST\).
+
+Using the span and work laws, we can observe that the above method is bounded by the inequalities \(O(1) \leq T_P, \dfrac{O(ST)}{P} \leq T_P\).
+Thus it can be determined that the best possible time complexity with \(P\) processors is bounded by ratio of available processors to the size of the transposed matrix (the work law).
+This gives the function an overall time complexity of:
+
+\[
+    O(\dfrac{ST}{P}).
+\]
 
 \printbibliography[
     heading=bibintoc,
