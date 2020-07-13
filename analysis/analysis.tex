@@ -237,6 +237,15 @@ Thus, whilst the theoretical time complexity does not change, the number of proc
 
 Overall, this function has a \textit{\textbf{span}} of \(T_\infty = 2(D + D^2 + M_{T_\infty}(S) + DM_{T_\infty}(N))\), and has \(T_1 = P(S(D + D^2) + M_{T_1}(S) + DM_{T_1}(N) + B(S(D + D^2) + M_{T_1}(S)))\) \textit{\textbf{work}}, where \(P\) is the number of SNR maximums and \(B\) is the number of times shifts made to background noise.
 
+\subsection{Calculating heat skymaps} \label{sec:coh_skymap}
+
+If the coherent SNR exceeds a threshold, the post-processing produces a skymap of the highest SNR in the GPU function \texttt{ker\_coh\_skymap}.
+
+The function determines the highest maximum SNR by using the maximum reduction with index preservation technique discussed in section \ref{sec:reduce}.
+Following this, the function re-performs the process discussed in section \ref{sec:skydir} with additional sky directions and without the reduction to generate the final skymap.
+
+As such, this function has a \textit{\textbf{span}} of \(T_\infty = M_{T_\infty}(P) + D + D^2\) and total \textit{\textbf{work}} of \(T_1 = M_{T_1}(P) + S(D + D^2)\).
+
 \printbibliography[
     heading=bibintoc,
     title={Bibliography}
