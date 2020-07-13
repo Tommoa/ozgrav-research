@@ -187,6 +187,56 @@ This gives the function an overall time complexity of:
     O(\dfrac{ST}{P}).
 \]
 
+\subsection{Determining the coherent correlation and statistical value of data points} \label{sec:coh_max_and_chisq_versatile}
+
+The scoring metric of different templates and times is determined using coherent correlation and determining their statistical value using a chi squared-based distribution.
+These scoring metrics are performed using the GPU function \texttt{ker\_coh\_max\_and\_chisq\_versatile}, and thus should be analysed as a parallelized function.
+
+In CUDA, threads are partitioned three times, into blocks, warps and threads.
+Each block is a collection of threads that runs simultaneously, and each warp is a sub-collection of threads within that block, allowing for more coarse-grained execution of algorithms that can be parallelized.
+
+In this function, each block looks at a different SNR maximum (as discussed in section \ref{sec:peaks}) and splits the threads within the blocks for operations on that peak.
+
+\subsubsection{Determining the sky direction of the SNR maximum} \label{sec:skydir}
+
+Initially, each thread within a block looks at a different sky direction and determines the total signal-to-noise ratio (SNR) by summing the SNR of each of the detectors at that given sky direction with the relevant detector arrival time offsets.
+The time complexity for the calculation of SNR for a given time offset is \(O(D + D^2)\), where \(D\) is the number of detectors.
+The maximum SNR for all the sky directions is then spread across each warp and placed into shared memory before being shared across every thread in the block, which is an application of the parallelized maximum reduction with index preservation function discussed in section \ref{sec:reduce}.
+\\
+
+Thus, the \textit{\textbf{span}} of determining the sky direction with the highest signal to noise ratio is \(T_\infty = O(D + D^2 + M_{T_\infty}(S))\) and the \textit{\textbf{work}} is \(T_1 = O(S(D + D^2) + M_{T_1}(S)\), where \(S\) is the number of sky directions and \(M(x)\) is the complexity of the parallelized maximum reduction with index preservation function.
+We can further state that the \textit{\textbf{parallelism}} of this is equivalent to the number of sky directions, \(S + S/log S\).
+
+\subsubsection{Calculating signal consistency statistics} \label{sec:stat}
+
+After having determined the sky direction with the highest SNR for a given maximum, the function then calculates a signal-morphology based statistic \(\xi_D^2\) for each detector \(D\).
+The statistic is a reduced \(\chi^2\) distribution with \(D\times2 - 4\) degrees of freedom and a mean value of \(1\), and is given in the discrete form by:
+
+\[
+    \xi_D^2 = \frac{\sum_{j = -m}^{m} | \varrho_D[j] - \varrho_D[0] A_D[j]|^2}{\sum_{j = -m}^{m} (2 - 2|A_D[j]|^2)},
+\]
+where \(\varrho\) is the coherent SNR, \(A_D\) is the vector of the correlation of the given template with the output from the detector and \(2\times{m}\) is the number of samples.
+
+The numerator of the statistic is calculated by splitting the number of samples between the threads of a block, followed by combining the results of the statistic across each warp and then each block.
+The combination of the statistic across each warp and block is a modification of the parallelized maximum reduction with index preservation discussed in section \ref{sec:reduce} that uses addition instead of maximum as the combining binary function.
+Thus the \textit{\textbf{span}} of calculating the statistic is \(T_\infty = O(D\times{M_{T_\infty}(N)})\) and its \textit{\textbf{work}} is \(T_1 = O(D\times{M_{T_1}(N)})\), where \(N\) is the number of samples.
+We can then state that the \textit{\textbf{parallelism}} of calculating the statistic is equivalent to the parallelism of the reduction, \(O(N/logN)\).
+
+\subsubsection{Generating time-shifted background noise statistics} \label{sec:background}
+
+% Why do we regenerate the background noise for every peak? Other than where we output
+% the background noise, there's no difference between any of the peaks
+%
+% Removing background noise generation from this function would increase the speed of
+% this function by an order of magnitude
+The function then performs a number of time shifts on background noise for use with the significance estimation.
+The generation of a single background statistical variant is equal to the total work of the function so far, save that instead of using blocks for every peak, each warp looks at a different time shift.
+Thus, whilst the theoretical time complexity does not change, the number of processors available is smaller, so the actual runtime each loop is approximately the warp size slower.
+
+\subsubsection{Overall computational cost} \label{sec:versatile_cost}
+
+Overall, this function has a \textit{\textbf{span}} of \(T_\infty = 2(D + D^2 + M_{T_\infty}(S) + DM_{T_\infty}(N))\), and has \(T_1 = P(S(D + D^2) + M_{T_1}(S) + DM_{T_1}(N) + B(S(D + D^2) + M_{T_1}(S)))\) \textit{\textbf{work}}, where \(P\) is the number of SNR maximums and \(B\) is the number of times shifts made to background noise.
+
 \printbibliography[
     heading=bibintoc,
     title={Bibliography}
