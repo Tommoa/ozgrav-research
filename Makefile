@@ -27,7 +27,7 @@ reduce_with_index: $(ODIR)/reduce_with_index.o
 bench: reduce_with_index
 
 nvcc: CC=nvcc
-nvcc: CVER=--std=c++14
+nvcc: CVER=--std=c++11
 nvcc: ELIBS=
 nvcc: EFLAGS=
 nvcc: bench
