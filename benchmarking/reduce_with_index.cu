@@ -214,8 +214,8 @@ __global__ void reduce_chunked(const float *__restrict__ input, const int size,
     float cur;
     float max = 0.0;
     int index = 0;
-    int chunk = blockDim.x << 3;
-    for (int start = threadIdx.x << 3, end = (threadIdx.x + 1) << 3;
+    int chunk = blockDim.x << 2;
+    for (int start = threadIdx.x << 2, end = (threadIdx.x + 1) << 2;
          start < size; start += chunk, end += chunk) {
         for (int i = start; i < end && i != size; ++i) {
             cur = input[i];
@@ -238,8 +238,8 @@ __global__ void reduce_chunked_exit(const float *__restrict__ input,
     float cur;
     float max = 0.0;
     int index = 0;
-    int chunk = blockDim.x << 3;
-    for (int start = threadIdx.x << 3, end = (threadIdx.x + 1) << 3;
+    int chunk = blockDim.x << 2;
+    for (int start = threadIdx.x << 2, end = (threadIdx.x + 1) << 2;
          start < size; start += chunk, end += chunk) {
         for (int i = start; i < end && i != size; ++i) {
             cur = input[i];
@@ -272,8 +272,8 @@ __global__ void reduce_chunked_shared(const float *__restrict__ input,
     float max = 0.f;
     int index = 0;
 
-    int chunk = blockDim.x << 3;
-    for (int start = threadIdx.x << 3, end = (threadIdx.x + 1) << 3;
+    int chunk = blockDim.x << 2;
+    for (int start = threadIdx.x << 2, end = (threadIdx.x + 1) << 2;
          start < size; start += chunk, end += chunk) {
         for (int i = start; i < end && i != size; ++i) {
             float cur = input[i];
@@ -315,9 +315,9 @@ __global__ void reduce_chunked_blocks(const float *__restrict__ input,
 
     float max = 0.f;
     int index = 0;
-    int chunk = (gridDim.x * blockDim.x) << 3;
-    int start = (threadIdx.x + blockIdx.x * blockDim.x) << 3;
-    int end = start + 8;
+    int chunk = (gridDim.x * blockDim.x) << 2;
+    int start = (threadIdx.x + blockIdx.x * blockDim.x) << 2;
+    int end = start + 4;
     for (; start < size; start += chunk, end += chunk) {
         end = end ^ ((end ^ size) & -(end > size)); // min(end, size);
         for (int i = start; i < end; ++i) {
@@ -404,7 +404,8 @@ int main(int argc, char **argv) {
         cpu::do_not_optimize(standard);
         cpu::clobber();
     });
-    std::cout << next << "\t(" << cpu::bench(baseline, next) << "%)" << std::endl;
+    std::cout << next << "\t(" << cpu::bench(baseline, next) << "%)"
+              << std::endl;
 #endif
 
     next = gpu::benchmark(iterations, "naive", [&]() {
