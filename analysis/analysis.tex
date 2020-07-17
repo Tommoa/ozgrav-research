@@ -152,34 +152,34 @@ Functions that include maximum reduction with index preservation will be denoted
 The coherent post-processing in SPIIR determines the number of samples over a signal-to-noise (SNR) threshold in order to not do more work than is required.
 The function that is used for determining the number of samples over the threshold (\texttt{peaks\_over\_thresh}) is a sequential algorithm that runs on the CPU, and shall be analysed as such, although there is an alternative GPU-based implementation that is not used.
 
-Initially, the function performs a maximum reduction with index preservation to get the maximum SNR from the IIR templates for each sample.
+Initially, the function performs a maximum reduction with index preservation to get the maximum SNR from the IIR filters for each sample.
 Recalling from section \ref{sec:reduce} that for maximum reduction with index preservation \(T_1 = O(N)\), and that this operation is performed \(S\) times, where \(S\) is the number of samples, we can determine that this initial reduction has a time complexity of 
-\(O(ST)\), where \(T\) is the number of templates.
+\(O(SF)\), where \(F\) is the number of filters.
 
-The function then determines the maximum SNR across the templates found from the previous step by stepping through every combination of samples and removing SNR samples that are using the same template and have a lower SNR, resulting in a step with a time complexity of \(O(S^2)\).
+The function then determines the maximum SNR across the filters found from the previous step by stepping through every combination of samples and removing SNR samples that are using the same filter and have a lower SNR, resulting in a step with a time complexity of \(O(S^2)\).
 
 The function then determines the maximum overall SNR for the input samples (\(O(S)\)) and cycles through every maximum SNR to cluster maximums that are close together to be a single combined maximum.
-The number of maximums is bounded by (\(O(\min\{S,T\})\)) as there cannot be more maximums than there are samples or templates.
+The number of maximums is bounded by (\(O(\min\{S,F\})\)) as there cannot be more maximums than there are samples or filters.
 
-This gives the overall function a time complexity of \(O(ST + S^2 + S + \min\{S,T\})\), which can be reduced to the dominating terms of:
+This gives the overall function a time complexity of \(O(SF + S^2 + S + \min\{S,F\})\), which can be reduced to the dominating terms of:
 
 \[
-    O(ST + S^2).
+    O(SF + S^2).
 \]
 
 \subsection{Transposing the input matrices} \label{sec:transpose}
 
-The full post-processing function requires that the input matrix is transposed for better memory access such that each row is a different template, and each column is a different sample.
+The full post-processing function requires that the input matrix is transposed for better memory access such that each row is a different filter, and each column is a different sample.
 To transpose the matrix, the GPU function \texttt{transpose\_matrix} is used, thus this should be analysed as a parallel algorithm.
 
 The algorithm in use works by breaking the original array into tiles of size \(32\times32\), and then inserting the transpose of the tile into an output array.
 The tiles are further broken down eight processors per row, so each thread does four copies.
 We can conceptualise this as a DAG by observing that each tile does not depend on any other tile to be completed, and that each tile is composed of \(32\times8\) interdependent processors, each doing 4 units of work.
 
-Using this observation, we can see that the \textit{\textbf{span}} of the algorithm is \(T_\infty = (32\times8)\times4 = O(1024) = O(1)\), and the \textit{\textbf{work}} is \(T_1 = O(ST)\), where \(S\) is the number of samples and \(T\) is the number of templates.
-Thus, the \textit{\textbf{parallelism}} of the transpose is \(p = ST\).
+Using this observation, we can see that the \textit{\textbf{span}} of the algorithm is \(T_\infty = (32\times8)\times4 = O(1024) = O(1)\), and the \textit{\textbf{work}} is \(T_1 = O(SF)\), where \(S\) is the number of samples and \(F\) is the number of filters.
+Thus, the \textit{\textbf{parallelism}} of the transpose is \(p = SF\).
 
-Using the span and work laws, we can observe that the above method is bounded by the inequalities \(O(1) \leq T_P, \dfrac{O(ST)}{P} \leq T_P\).
+Using the span and work laws, we can observe that the above method is bounded by the inequalities \(O(1) \leq T_P, \dfrac{O(SF)}{P} \leq T_P\).
 Thus it can be determined that the best possible time complexity with \(P\) processors is bounded by ratio of available processors to the size of the transposed matrix (the work law).
 This gives the function an overall time complexity of:
 
@@ -189,7 +189,7 @@ This gives the function an overall time complexity of:
 
 \subsection{Determining the coherent correlation and statistical value of data points} \label{sec:coh_max_and_chisq_versatile}
 
-The scoring metric of different templates and times is determined using coherent correlation and determining their statistical value using a chi squared-based distribution.
+The scoring metric of different filters and times is determined using coherent correlation and determining their statistical value using a chi squared-based distribution.
 These scoring metrics are performed using the GPU function \texttt{ker\_coh\_max\_and\_chisq\_versatile}, and thus should be analysed as a parallelised function.
 
 In CUDA, threads are partitioned three times, into blocks, warps and threads.
@@ -215,7 +215,7 @@ The statistic is a reduced \(\chi^2\) distribution with \(D\times2 - 4\) degrees
 \[
     \xi_D^2 = \frac{\sum_{j = -m}^{m} | \varrho_D[j] - \varrho_D[0] A_D[j]|^2}{\sum_{j = -m}^{m} (2 - 2|A_D[j]|^2)},
 \]
-where \(\varrho\) is the coherent SNR, \(A_D\) is the vector of the correlation of the given template with the output from the detector and \(2\times{m}\) is the number of samples.
+where \(\varrho\) is the coherent SNR, \(A_D\) is the vector of the correlation of the given filter with the output from the detector and \(2\times{m}\) is the number of samples.
 
 The numerator of the statistic is calculated by splitting the number of samples between the threads of a block, followed by combining the results of the statistic across each warp and then each block.
 The combination of the statistic across each warp and block is a modification of the parallelised maximum reduction with index preservation discussed in section \ref{sec:reduce} that uses addition instead of maximum as the combining binary function.
