@@ -246,6 +246,32 @@ Following this, the function re-performs the process discussed in section \ref{s
 
 As such, this function has a \textit{\textbf{span}} of \(T_\infty = M_{T_\infty}(P) + D + D^2\) and total \textit{\textbf{work}} of \(T_1 = M_{T_1}(P) + S(D + D^2)\).
 
+\section{Conclusion} \label{sec:conclusion}
+
+We can determine the total span and work of the coherent post-processing step in the SPIIR pipeline can be determined by summing the total spans and works of the internal functions.
+Unlike with the individual previous individual functions, we cannot determine the overall parallelism as the post-processing step spans a number individual functions that can each be run with a different set of processors.
+As the step to determine the number of peaks over a threshold (see section \ref{sec:peaks}) is sequential, we can consider its time complexity as contributing to both the span and work of the total pipeline.
+Another thing to note is that the steps for determining the coherent correlation, statistic value and skymaps (sections \ref{sec:coh_max_and_chisq_versatile} and \ref{sec:skydir}) will be run for every detector.
+
+With this in mind, we can determine that the \textit{\textbf{span}} of the post-processing is:
+
+\[
+    T_\infty = O(NF + N^2 + 1 + D(2(D + D^2 + log S + D log N) + log P + D + D^2))
+\]
+\[
+    = O(NF + N^2 + D^3 + D^2 log N + D log S + D log P),
+\]
+where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(F\) is the number of filters, \(N\) is the number of samples and \(P = \max\{ S, F \}\).
+
+The total \textit{\textbf{work}} of the post-processing is:
+\[
+    T_1 = O(NF + NF + S^2 + D(P + S(D + D^2) + P(S(D + D^2) + S + DN + B(S(D + D^2) + S))))
+\]
+\[
+    = O(NF + N^2 + SPD^3 + SPBD^3 + ND^2),
+\]
+where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(F\) is the number of filters, \(N\) is the number of samples, \(B\) is the number of is the number of times shifts made to background noise and \(P = \max\{ S, F \}\)
+
 \printbibliography[
     heading=bibintoc,
     title={Bibliography}
