@@ -6,5 +6,5 @@
 -lcudart
 -ltbb
 -L/usr/lib/cuda/
--I../include
+-Iinclude
 -D DEBUG

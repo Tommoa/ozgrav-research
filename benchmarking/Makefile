@@ -15,7 +15,7 @@ DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 _OBJ = reduce_with_index.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
-$(ODIR)/%.o: benchmarking/%.cu $(DEPS)
+$(ODIR)/%.o: src/%.cu $(DEPS)
 	mkdir -p obj
 	$(CC) -c -o $@ $< $(CFLAGS) $(CVER) $(EFLAGS)
 

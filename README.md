@@ -17,10 +17,12 @@ There will be multiple components of this research repository, and links to all 
 ## Building benchmarks
 
 - You can build the benchmarks in the `benchmarking` directory with:
-`cat benchmarking/compile_flags.txt | xargs clang++ <file>`
+`benchmarking/ $ make`
+- If you want to use `nvcc` (NVIDIA's CUDA compiler) instead of `clang`, run:
+`make nvcc`
 
 ### Dependencies
 
 - CUDA > 9.0
 - clang > 8.0
-- Intel TBB
+- Intel TBB (`clang` only)
