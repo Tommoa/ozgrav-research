@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cpuid.h>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
-#include <cstring>
 #include <thread>
 #include <vector>
 
@@ -62,11 +62,11 @@ double benchmark(int iterations, const std::string mode, F &&function) {
     return diff.count();
 }
 
-auto bench(double baseline, double other) {
+double bench(double baseline, double other) {
     return ((other - baseline) / baseline) * 100;
 }
 
-template<typename T, typename Container>
+template <typename T, typename Container>
 void finish_benchmark(double baseline, double time, T expected,
                       Container &output) {
     std::cout << time << "\t(" << std::showpos << cpu::bench(baseline, time)
