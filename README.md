@@ -6,9 +6,11 @@ OzGrav researches gravitational waves, and attempts to use the data taken from v
 
 My research project primarily focusses on developing methods to filter or ignore specific detectors for detection, but to ensure that those detectors are still synchronized with all the other data that comes in.
 To give a proper idea, the below is the data flow for the current pipeline:
+
 ![](resources/current_pipeline.png)
 
 The plan is to implement this data flow:
+
 ![](resources/new_pipeline.png)
 
 ## Components
