@@ -24,10 +24,10 @@ There will be multiple components of this research repository, and links to all 
 
 ## Building benchmarks
 
-- You can build the benchmarks in the `benchmarking` directory with:
-`benchmarking/ $ make`
+- You can build the benchmarks with:
+`make -C benchmarking`
 - If you want to use `nvcc` (NVIDIA's CUDA compiler) instead of `clang`, run:
-`make nvcc`
+`make -C benchmarking nvcc`
 
 ### Dependencies
 
