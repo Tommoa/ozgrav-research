@@ -367,7 +367,9 @@ int main(int argc, char **argv) {
     const int iterations = 1000;
     cudaDeviceProp properties;
     cudaGetDeviceProperties(&properties, 0);
-    int blocks = properties.multiProcessorCount;
+    // For some reason, we crash if the number of blocks is higher than 73, even
+    // on devices with 80 multi-processors
+    int blocks = std::min(73, properties.multiProcessorCount);
 
     gpu::ManagedVector<float> input(N);
     gpu::ManagedVector<float> output(1024 / 32);
