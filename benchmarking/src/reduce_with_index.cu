@@ -9,6 +9,9 @@
 #include <iostream>
 #include <random>
 
+#include <thrust/execution_policy.h>
+#include <thrust/extrema.h>
+
 /// AtomicMax for floats
 __device__ static inline void atomicMax(float *address, float val) {
     int *address_as_i = (int *)address;
@@ -362,6 +365,9 @@ int main(int argc, char **argv) {
     gpu::get_info();
     const long long N = 25600000;
     const int iterations = 1000;
+    cudaDeviceProp properties;
+    cudaGetDeviceProperties(&properties, 0);
+    int blocks = properties.multiProcessorCount;
 
     gpu::ManagedVector<float> input(N);
     gpu::ManagedVector<float> output(1024 / 32);
@@ -398,8 +404,8 @@ int main(int argc, char **argv) {
     double next;
 #if __cplusplus >= 201703L
     next = cpu::benchmark(iterations, "cpu_parallel", [&]() {
-        auto standard =
-            std::max_element(std::execution::par, input.begin(), input.end());
+        auto standard = std::max_element(std::execution::par, input.data(),
+                                         input.data() + input.size());
         actual_max = *standard;
         cpu::do_not_optimize(standard);
         cpu::clobber();
@@ -407,6 +413,15 @@ int main(int argc, char **argv) {
     std::cout << next << "\t(" << cpu::bench(baseline, next) << "%)"
               << std::endl;
 #endif
+
+    next = gpu::benchmark(iterations, "thrust_max", [&]() {
+        auto standard = thrust::max_element(thrust::device, input.data(),
+                                            input.data() + input.size());
+        output[0] = *standard;
+        cpu::do_not_optimize(standard);
+        cpu::clobber();
+    });
+    cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "naive", [&]() {
         reduce_naive<<<1, 1024>>>(input.data(), input.size(), output.data(),
@@ -441,16 +456,16 @@ int main(int argc, char **argv) {
     cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "blocks", [&]() {
-        reduce_blocks<<<4, 1024>>>(input.data(), input.size(), output.data(),
-                                   output_index.data());
+        reduce_blocks<<<blocks, 1024>>>(input.data(), input.size(),
+                                        output.data(), output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
     cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "warp", [&]() {
-        reduce_warp<<<4, 1024>>>(input.data(), input.size(), output.data(),
-                                 output_index.data());
+        reduce_warp<<<blocks, 1024>>>(input.data(), input.size(), output.data(),
+                                      output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
@@ -481,8 +496,8 @@ int main(int argc, char **argv) {
     cpu::finish_benchmark(baseline, next, actual_max, output);
 
     next = gpu::benchmark(iterations, "chunked_blocks", [&]() {
-        reduce_chunked_blocks<<<4, 1024>>>(input.data(), input.size(),
-                                           output.data(), output_index.data());
+        reduce_chunked_blocks<<<blocks, 1024>>>(
+            input.data(), input.size(), output.data(), output_index.data());
         GPUASSERT(cudaGetLastError());
         GPUASSERT(cudaDeviceSynchronize());
     });
