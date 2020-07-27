@@ -62,7 +62,7 @@ Coherent post-processing was introduced in \cite{ChuThesis} by Qi Chu et al as a
 \cite{ChuThesis} states that the multi-detector maximum log likelihood ratio to be equal to the coherent signal to noise ratio \(\rho{}^2_c\), which can be expressed as:
 
 \begin{equation}
-    \rho^2_c = \underset{max\{A_{jk},\theta,t_{c},\alpha,\delta\}}{\ln \mathcal{L}_{NW}},
+    \rho^2_c = \underset{\max\{A_{jk},\theta,t_{c},\alpha,\delta\}}{\ln \mathcal{L}_{NW}},
 \end{equation}
 \\
 where \(A_{jk}\) describes the relative inclination of the detector to the source, \(\theta\) is the mass of the source, \(\alpha\) and \(\beta\) are the sky directions of the source and \(\mathcal{L}_{NW}\) is the network log likelihood network.
@@ -123,26 +123,26 @@ Determining the span, work, parallelism, efficiency and cost, and examining the 
 One of the more common operations in the SPIIR pipeline is the concept of a ``maximum reduction with index preservation''.
 Reduction is the idea of taking some array of data and producing a single value from that array, whether it is the total sum of the array or the maximum value of the array and its index in the array as it is in this case.
 
-\cite{reduction} discusses the computational complexity of reduction algorithms in a parallelised context, noting that the best complexity according to Brent's Law is \(O(\dfrac{N}{log N})\) threads each doing \(O(log N)\) sequential work, resulting in a total overall cost of \(O(\dfrac{N}{log N}\times{log N}) = O(N)\).
+\cite{reduction} discusses the computational complexity of reduction algorithms in a parallelised context, noting that the best complexity according to Brent's Law is \(O(\dfrac{N}{\log N})\) threads each doing \(O(\log N)\) sequential work, resulting in a total overall cost of \(O(\dfrac{N}{\log N}\times{\log N}) = O(N)\).
 
 We can note from our own analysis, that the process of reduction can be parallelised by the use of a binary tree of operations, where each vertex in the binary tree combines the results of the two parent vertices.
 In the case of determining the maximum of two numbers, each vertex is identical in the amount of work done, and thus we can determine each vertex to be a unit of work.
-As there are \(N\) elements in the original array, we can note that the height of the binary tree is \(log N\), and each level of the binary tree has \(N_l/2\) vertices, thus the total number of vertices in the binary tree is \(\sum_{i=0}^{log N}{2\times{i}} = N\).
-Using this information, we can determine that the \textit{\textbf{work}} of a parallelised reduction is \(T_1 = O(N\times1) = O(N)\), and that the \textit{\textbf{span}} of the reduction is \(T_\infty = O(log N \times {1}) = O(log N)\).
+As there are \(N\) elements in the original array, we can note that the height of the binary tree is \(\log N\), and each level of the binary tree has \(N_l/2\) vertices, thus the total number of vertices in the binary tree is \(\sum_{i=0}^{\log N}{2\times{i}} = N\).
+Using this information, we can determine that the \textit{\textbf{work}} of a parallelised reduction is \(T_1 = O(N\times1) = O(N)\), and that the \textit{\textbf{span}} of the reduction is \(T_\infty = O(\log N \times {1}) = O(\log N)\).
 Thus, the \textit{\textbf{parallelism}} of the reduction is:
 
 \[
-    p = \dfrac{N}{log N}.
+    p = \dfrac{N}{\log N}.
 \]
 
-Using the span and work laws, we can observe that any algorithm using the above method is bounded by the inequalities \(O(log N) \leq T_P, \dfrac{O(N)}{P} \leq T_P\).
-This means that best possible time complexity with \(P\) processors is \(O(log N)\) (the span law).
-We can determine the minimum number of processors required to achieve this runtime using the formula \(T_P = O(log N) = \dfrac{O(N)}{P}\), which can be rearranged to
+Using the span and work laws, we can observe that any algorithm using the above method is bounded by the inequalities \(O(\log N) \leq T_P, \dfrac{O(N)}{P} \leq T_P\).
+This means that best possible time complexity with \(P\) processors is \(O(\log N)\) (the span law).
+We can determine the minimum number of processors required to achieve this runtime using the formula \(T_P = O(\log N) = \dfrac{O(N)}{P}\), which can be rearranged to
 \[
-    P = \dfrac{N}{log N},
+    P = \dfrac{N}{\log N},
 \]
-thus the time complexity cannot improve past \(P = N/log N\) processors.
-We can also observe that using \(P = N/log N\) processors gives a \textit{\textbf{cost}} of \(C_P = N\), which is identical to the sequential algorithm.
+thus the time complexity cannot improve past \(P = N/\log N\) processors.
+We can also observe that using \(P = N/\log N\) processors gives a \textit{\textbf{cost}} of \(C_P = N\), which is identical to the sequential algorithm.
 \\
 
 Functions that include maximum reduction with index preservation will be denoted for clarity with \(M(x)\), where \(x\) is the size of the array being reduced.
@@ -205,7 +205,7 @@ The maximum SNR for all the sky directions is then spread across each warp and p
 \\
 
 Thus, the \textit{\textbf{span}} of determining the sky direction with the highest signal to noise ratio is \(T_\infty = O(D + D^2 + M_{T_\infty}(S))\) and the \textit{\textbf{work}} is \(T_1 = O(S(D + D^2) + M_{T_1}(S)\), where \(S\) is the number of sky directions and \(M(x)\) is the complexity of the parallelised maximum reduction with index preservation function.
-We can further state that the \textit{\textbf{parallelism}} of this is equivalent to the number of sky directions, \(S + S/log S\).
+We can further state that the \textit{\textbf{parallelism}} of this is equivalent to the number of sky directions, \(S + S/\log S\).
 
 \subsubsection{Calculating signal consistency statistics} \label{sec:stat}
 
@@ -220,7 +220,7 @@ where \(\varrho\) is the coherent SNR, \(A_D\) is the vector of the correlation 
 The numerator of the statistic is calculated by splitting the number of samples between the threads of a block, followed by combining the results of the statistic across each warp and then each block.
 The combination of the statistic across each warp and block is a modification of the parallelised maximum reduction with index preservation discussed in section \ref{sec:reduce} that uses addition instead of maximum as the combining binary function.
 Thus the \textit{\textbf{span}} of calculating the statistic is \(T_\infty = O(D\times{M_{T_\infty}(N)})\) and its \textit{\textbf{work}} is \(T_1 = O(D\times{M_{T_1}(N)})\), where \(N\) is the number of samples.
-We can then state that the \textit{\textbf{parallelism}} of calculating the statistic is equivalent to the parallelism of the reduction, \(O(N/logN)\).
+We can then state that the \textit{\textbf{parallelism}} of calculating the statistic is equivalent to the parallelism of the reduction, \(O(N/\log N)\).
 
 \subsubsection{Generating time-shifted background noise statistics} \label{sec:background}
 
@@ -256,10 +256,10 @@ Another thing to note is that the steps for determining the coherent correlation
 With this in mind, we can determine that the \textit{\textbf{span}} of the post-processing is:
 
 \[
-    T_\infty = O(NF + N^2 + 1 + D(2(D + D^2 + log S + D log N) + log P + D + D^2))
+    T_\infty = O(NF + N^2 + 1 + D(2(D + D^2 + \log S + D \log N) + \log P + D + D^2))
 \]
 \[
-    = O(NF + N^2 + D^3 + D^2 log N + D log S + D log P),
+    = O(NF + N^2 + D^3 + D^2 \log N + D \log S + D \log P),
 \]
 where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(F\) is the number of filters, \(N\) is the number of samples and \(P = \max\{ S, F \}\).
 
