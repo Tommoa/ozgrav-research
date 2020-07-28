@@ -76,6 +76,25 @@ This report aims to determine and justify the computational complexity of the ex
 
 \section{Background} \label{sec:background}
 
+\subsection{CUDA} \label{sec:back_cuda}
+
+CUDA \cite{CUDA} is an extension of the C++ programming language created by NVIDIA that allows for the development of GPU-accelerated applications.
+In \cite{SPIIRGPU2018}, the SPIIR pipeline had multiple components rewritten in CUDA to take advantage of the high number of simultaneous threads available compared to CPUs.
+As such, it is worth understanding the computational model of CUDA for the analysis of the coherent post-processing step of SPIIR.
+
+In CUDA, each individual sequence of instructions being executed is called a \textit{thread}.
+By its nature, a highly-parallelised environment such as GPUs will run many individual threads, which are partitoned into \textit{warps}, a group of (typically 32) threads.
+Warps are the smallest unit that GPUs schedule, and all threads in a warp must execute the same instruction -- although each thread maintains its own instruction pointer and can branch independently from the warp at a small performance cost.
+The performance cost of branching within a warp means that a major optimization that does not affect computational complexity in CUDA can be simply reducing the number of branches.
+Warps are further organised into thread blocks, which contain a small amount of fast memory shared between the threads in the block.
+Blocks in CUDA are typically executed on the same Simultaneous Multiprocessor (SM).
+The CUDA Programming Guide (\cite{CUDA_Guide}) states that the number of blocks and warps that can reside and be processed together on an SM depends on the number of registers and shared memory available on the SM, as well as on a CUDA defined maximum number of blocks and warps.
+
+For the purpose of actual time-based computation, the maximum number of threads that can run at any given time is determined by a few factors of the CUDA runtime; the maximum number of resident warps per SM; the maximum number of resident threads per SM; the number of 32-bit registers per thread; the number of 32-bit registers per SM; the number of 32-bit registers per thread block; and the amount of shared memory in each of those divisions.
+Thus, one major determining factor in any speed-up given by a CUDA operation can be determined by the ability to split the workload across threads and thread blocks such that the number of registers and used memory is well balanced across threads.
+
+\subsection{Analysing complexities of parallelised algorithms} \label{sec:back_par}
+
 According to \cite{CLRS}, the theoretical efficiency of a multi-threaded or parallelised algorithm can be measured using the metrics of `span', `work', `speed-up' and `parallelism', all of which should be considered in the context of a directed acyclic graph (DAG) of operations in the algorithm.
 The \textit{\textbf{work}} of a parallelised computation is the total time to execute the entire computation sequentially on a single processor, and can be found by summing the total work of every vertex in the DAG.
 In comparison, the \textit{\textbf{span}} of a parallelised computation is the maximum time taken to complete any path in the DAG.
@@ -190,9 +209,6 @@ This gives the function an overall time complexity of:
 
 The scoring metric of different templates and times is determined using coherent correlation and determining their statistical value using a chi squared-based distribution.
 These scoring metrics are performed using the GPU function \texttt{ker\_coh\_max\_and\_chisq\_versatile}, and thus should be analysed as a parallelised function.
-
-In CUDA, threads are partitioned three times, into blocks, warps and threads.
-Each block is a collection of threads that runs simultaneously, and each warp is a sub-collection of threads within that block, allowing for more coarse-grained execution of algorithms that can be parallelised.
 
 In this function, each block looks at a different SNR maximum (as discussed in section \ref{sec:peaks}) and splits the threads within the blocks for operations on that peak.
 
