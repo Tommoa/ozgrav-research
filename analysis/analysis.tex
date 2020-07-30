@@ -61,7 +61,7 @@ The pipeline is currently thought to be the fastest of all existing pipelines, a
 Coherent post-processing was introduced in \cite{ChuThesis} by Qi Chu et al as an alternative to coincidence post-processing.
 \cite{ChuThesis} states that the multi-detector maximum log likelihood ratio to be equal to the coherent signal to noise ratio \(\rho{}^2_c\), which can be expressed as:
 
-\begin{equation}
+\begin{equation} \label{eq:coh_snr}
     \rho^2_c = \underset{\max\{A_{jk},\theta,t_{c},\alpha,\delta\}}{\ln \mathcal{L}_{NW}},
 \end{equation}
 \\
@@ -108,29 +108,29 @@ Using the above definitions, we can re-derive several laws that provide lower bo
 In one step, a computer with \(P\) processors can do \(P\) units of work, and thus in \(T_P\) time can perform \(PT_P\) units of work.
 As the total work to be done as per above is \(T_1\), the \textit{\textbf{work law}} states that \cite{CLRS}:
 
-\[
+\begin{equation} \label{eq:work_law}
     T_P \geq \dfrac{T_1}{P}.
-\]
+\end{equation}
 
 It is also evident that a computer with \(P\) processors cannot run any faster than a computer with an infinite number of processors, as the computer with an infinite number of processors can emulate a computer with \(P\) processors by using a subset of its processors, leading to the \textit{\textbf{span law}} \cite{CLRS}:
 
-\[
+\begin{equation} \label{eq:span_law}
     T_P \geq T_\infty.
-\]
+\end{equation}
 
 It is also useful to use the metrics of `cost' and `efficiency' when analysing parallel algorithms \cite{brent}.
 The \textit{\textbf{cost}} of a parallel algorithm is minimised when all of processors are used at every step for useful computation and thus can be defined as \(C_P = P\times{T_P}\).
 \textit{\textbf{Efficiency}} is closely related to cost and describes speed-up per processor and can be defined as:
 
-\[
+\begin{equation} \label{eq:efficiency}
     e_P = \dfrac{S_P}{P} = \dfrac{T_1}{C_P}.
-\]
+\end{equation}
 
 Another helpful theorem for analysis is \textit{\textbf{Brent's Theorem}}, which states that for an algorithm that can run in parallel on \(N\) processors can be executed on \(P < N\) processors in a time of approximately \cite{BrentsLaw}
 
-\[
+\begin{equation} \label{eq:brents_law}
     T_P \leq T_N + \dfrac{T_1-T_N}{P}.
-\]
+\end{equation}
 
 This can be approximated with the upper bound of \(O(\dfrac{T_1}{P} + T_N)\) \cite{brent}.
 
@@ -155,7 +155,7 @@ Thus, the \textit{\textbf{parallelism}} of the reduction is:
 \]
 
 Using the span and work laws, we can observe that any algorithm using the above method is bounded by the inequalities \(O(\log N) \leq T_P, \dfrac{O(N)}{P} \leq T_P\).
-This means that best possible time complexity with \(P\) processors is \(O(\log N)\) (the span law).
+This means that best possible time complexity with \(P\) processors is \(O(\log N)\) (equation \ref{eq:span_law}).
 We can determine the minimum number of processors required to achieve this runtime using the formula \(T_P = O(\log N) = \dfrac{O(N)}{P}\), which can be rearranged to
 \[
     P = \dfrac{N}{\log N},
@@ -197,7 +197,7 @@ We can conceptualise this as a DAG by observing that each tile does not depend o
 Using this observation, we can see that the \textit{\textbf{span}} of the algorithm is \(T_\infty = (32\times8)\times4 = O(1024) = O(1)\), and the \textit{\textbf{work}} is \(T_1 = O(ST)\), where \(S\) is the number of samples and \(T\) is the number of templates.
 Thus, the \textit{\textbf{parallelism}} of the transpose is \(p = ST\).
 
-Using the span and work laws, we can observe that the above method is bounded by the inequalities \(O(1) \leq T_P, \dfrac{O(ST)}{P} \leq T_P\).
+Using the span and work laws (equations \ref{eq:span_law} and \ref{eq:work_law}), we can observe that the above method is bounded by the inequalities \(O(1) \leq T_P, \dfrac{O(ST)}{P} \leq T_P\).
 Thus it can be determined that the best possible time complexity with \(P\) processors is bounded by ratio of available processors to the size of the transposed matrix (the work law).
 This gives the function an overall time complexity of:
 
@@ -227,9 +227,9 @@ We can further state that the \textit{\textbf{parallelism}} of this is equivalen
 After having determined the sky direction with the highest SNR for a given maximum, the function then calculates a signal-morphology based statistic \(\xi_D^2\) for each detector \(D\).
 The statistic is a reduced \(\chi^2\) distribution with \(D\times2 - 4\) degrees of freedom and a mean value of \(1\), and is given in the discrete form by:
 
-\[
+\begin{equation} \label{eq:statistic}
     \xi_D^2 = \frac{\sum_{j = -m}^{m} | \varrho_D[j] - \varrho_D[0] A_D[j]|^2}{\sum_{j = -m}^{m} (2 - 2|A_D[j]|^2)},
-\]
+\end{equation}
 where \(\varrho\) is the coherent SNR, \(A_D\) is the vector of the correlation of the given template with the output from the detector and \(2\times{m}\) is the number of samples.
 
 The numerator of the statistic is calculated by splitting the number of samples between the threads of a block, followed by combining the results of the statistic across each warp and then each block.
@@ -273,18 +273,18 @@ With this in mind, we can determine that the \textit{\textbf{span}} of the post-
 \[
     T_\infty = O(NT + N^2 + 1 + D(2(D + D^2 + \log S + D \log N) + \log P + D + D^2))
 \]
-\[
+\begin{equation} \label{eq:total_span}
     = O(NT + N^2 + D^3 + D^2 \log N + D \log S + D \log P),
-\]
+\end{equation}
 where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(T\) is the number of templates, \(N\) is the number of samples and \(P = \max\{ S, T \}\).
 
 The total \textit{\textbf{work}} of the post-processing is:
 \[
     T_1 = O(NT + NT + S^2 + D(P + S(D + D^2) + P(S(D + D^2) + S + DN + B(S(D + D^2) + S))))
 \]
-\[
+\begin{equation} \label{eq:total_work}
     = O(NT + N^2 + SPD^3 + SPBD^3 + ND^2),
-\]
+\end{equation}
 where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(T\) is the number of templates, \(N\) is the number of samples, \(B\) is the number of is the number of times shifts made to background noise and \(P = \max\{ S, T \}\)
 
 \printbibliography[
