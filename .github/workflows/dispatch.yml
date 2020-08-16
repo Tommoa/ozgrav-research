@@ -1,0 +1,15 @@
+name: Dispatch to site
+
+on: [page_build, workflow_dispatch]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push to site
+        uses: peter-evans/repository-dispatch@v1
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+          repository: "Tommoa/site"
+          event-type: update
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}", "module": "ozgrav-research", "branch": "gh-pages"}'
