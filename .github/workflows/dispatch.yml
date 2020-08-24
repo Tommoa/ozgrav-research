@@ -12,4 +12,4 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN }}
           repository: "Tommoa/site"
           event-type: update
-          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}", "module": "ozgrav-research", "branch": "gh-pages"}'
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}", "module": "static/ozgrav-research", "branch": "gh-pages"}'
