@@ -1,104 +1,48 @@
 name: Build PDFs
 
-on: [push]
+on: [push, workflow_dispatch]
 
 jobs:
-  proposal:
-    name: Build my research proposal
+  build:
+    name: Build LaTeX papers
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        path: ["proposal", "progress-report", "analysis", "abstract"]
     steps:
     - uses: actions/checkout@v2
     - uses: actions/cache@v2
       id: cache
       with:
         path: |
-          output/proposal.pdf
-        key: proposal-${{ hashFiles('proposal/**') }}
+          output/${{ matrix.path }}.pdf
+        key: ${{ matrix.path }}-${{ hashFiles(matrix.path) }}
     - uses: Tommoa/tectonic-fontawesome-action@master
       if: steps.cache.outputs.cache-hit != 'true'
       with:
-        tex_path: proposal/proposal.tex
+        tex_path: ${{ matrix.path }}/main.tex
     - name: Rename
       if: steps.cache.outputs.cache-hit != 'true'
       run: |
-          mkdir output
-          mv proposal/proposal.pdf output/
-          cp README.md output/index.md
-    - uses: actions/upload-artifact@v1
+        mkdir output
+        mv ${{ matrix.path }}/main.pdf output/${{ matrix.path }}.pdf
+        cp README.md output/index.md
+    - uses: actions/upload-artifact@v2
       with:
-        name: proposal.pdf
-        path: output/proposal.pdf
-    - name: Deploy to GitHub Pages
-      if: steps.cache.outputs.cache-hit != 'true'
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
-        publish_dir: ./output
-        allow_empty_commit: false
-        keep_files: true
-  progress-report:
-    name: Build progress report
+        name: ${{ matrix.path }}.pdf
+        path: output/${{ matrix.path }}.pdf
+  deploy:
+    name: Deploy to GitHub Pages
     runs-on: ubuntu-latest
+    needs: build
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/cache@v2
-      id: cache
-      with:
-        path: |
-          output/progress-2020-05-29.pdf
-        key: proposal-${{ hashFiles('progress-report/**') }}
-    - uses: Tommoa/tectonic-fontawesome-action@master
-      if: steps.cache.outputs.cache-hit != 'true'
-      with:
-        tex_path: progress-report/report.tex
-    - name: Rename
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: |
-          mkdir output
-          mv progress-report/report.pdf output/progress-2020-05-29.pdf
-          cp README.md output/index.md
-    - uses: actions/upload-artifact@v1
-      with:
-        name: progress-2020-05-29.pdf
-        path: output/progress-2020-05-29.pdf
+    - uses: actions/download-artifact@v2
+      with: 
+        path: output
     - name: Deploy to GitHub Pages
-      if: steps.cache.outputs.cache-hit != 'true'
       uses: peaceiris/actions-gh-pages@v3
       with:
-        deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
-        publish_dir: ./output
-        allow_empty_commit: false
-        keep_files: true
-  analysis:
-    name: Build complexity analysis report
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - uses: actions/cache@v2
-      id: cache
-      with:
-        path: |
-          output/analysis.pdf
-        key: proposal-${{ hashFiles('analysis/**') }}
-    - uses: Tommoa/tectonic-fontawesome-action@master
-      if: steps.cache.outputs.cache-hit != 'true'
-      with:
-        tex_path: analysis/analysis.tex
-    - name: Rename
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: |
-          mkdir output
-          mv analysis/analysis.pdf output/analysis.pdf
-          cp README.md output/index.md
-    - uses: actions/upload-artifact@v1
-      with:
-        name: analysis.pdf
-        path: output/analysis.pdf
-    - name: Deploy to GitHub Pages
-      if: steps.cache.outputs.cache-hit != 'true'
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+        github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./output
         allow_empty_commit: false
         keep_files: true

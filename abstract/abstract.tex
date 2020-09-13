@@ -1,0 +1,19 @@
+\section{Abstract}
+Gravitational waves have been postulated to exist since Albert Einstein’s publication of his general theory of relativity, as massive accelerating objects would cause ‘ripples’ in the curvature of spacetime.
+Direct detection of gravitational waves, however, remained beyond the reach of the scientific community until 2015, when the Laser Interferometric Gravitational-Wave Observatory (LIGO) reported an observation on the 14th of September.
+
+Due to their design, the detectors in use for gravitational wave detection have a significant amount of noise from other sources, whilst the gravitational waves themselves have very weak signals.
+As such, a large amount of data processing must be done to the outputs produced by the detectors in order to filter and extract any possible gravitational waves.
+These data processors are known as “pipelines”, and have historically been created by research groups that are a part of the LIGO Scientific Collaboration, and are used throughout observation runs for real-time data analysis.
+
+The Summed Parallel Infinite Impulse Response (SPIIR) pipeline, based on the SPIIR method originally implemented by Shaun Hooper in 2012, uses a number of IIR filters to approximate possible gravitational wave signals for detection, followed by post-processing to localise any potential candidates.
+The pipeline is currently thought to be the fastest of all existing pipelines, and has participated in every observation run since November 2015, successfully detecting most events that were seen in more than one detector.
+
+At the time of the start of this research, the SPIIR pipeline supported the use of two or three detectors for gravitational wave detection – the two American LIGO detectors and the Italian Virgo detector – although additional interferometers are likely to be introduced soon.
+This presents several issues with the existing pipeline design.
+This research project aims to address one of those.
+
+As with many of the other gravitational wave detection pipelines, providing support for additional detectors is a significant undertaking for the development team, with many hours of work and testing that need to be completed.
+As the number of available interferometers continues to grow, development work that could be spent on improving the optimisation, precision, or accuracy of the pipeline would instead have to be spent allowing for those detectors to be used.
+
+This seminar aims to show the implementation and design work done to provide the SPIIR pipeline with the ability to support any number of detectors.
