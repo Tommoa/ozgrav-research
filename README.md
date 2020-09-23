@@ -7,11 +7,11 @@ OzGrav researches gravitational waves, and attempts to use the data taken from v
 My research project primarily focusses on developing methods to filter or ignore specific detectors for detection, but to ensure that those detectors are still synchronized with all the other data that comes in.
 To give a proper idea, the below is the data flow for the current pipeline:
 
-![](resources/current_pipeline.png)
+![Current pipeline data flow](resources/current_pipeline.png)
 
 The plan is to implement this data flow:
 
-![](resources/new_pipeline.png)
+![New pipeline data flow](resources/new_pipeline.png)
 
 ## Components
 
@@ -21,6 +21,7 @@ There will be multiple components of this research repository, and links to all 
 - [Progress Report (2020/05/29)](https://tommoa.github.io/ozgrav-research/progress-2020-05-29.pdf)
 - [Callgraph for postprocessing](https://github.com/Tommoa/ozgrav-research/blob/master/resources/callgraph.png)
 - [Complexity analysis of postprocessing](https://tommoa.github.io/ozgrav-research/analysis.pdf)
+- [Seminar abstract](https://tommoa.github.io/ozgrav-research/abstract.pdf)
 
 ## Building benchmarks
 
