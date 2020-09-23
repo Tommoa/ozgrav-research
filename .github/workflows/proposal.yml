@@ -38,11 +38,13 @@ jobs:
     steps:
     - uses: actions/download-artifact@v2
       with: 
-        path: output
+        path: artifacts
+    - name: Move PDFs
+      run: |
+        mkdir -p output
+        mv artifacts/*/*.pdf output
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./output
-        allow_empty_commit: false
-        keep_files: true
