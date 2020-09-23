@@ -21,7 +21,10 @@ There will be multiple components of this research repository, and links to all 
 - [Progress Report (2020/05/29)](https://tommoa.github.io/ozgrav-research/progress-2020-05-29.pdf)
 - [Callgraph for postprocessing](https://github.com/Tommoa/ozgrav-research/blob/master/resources/callgraph.png)
 - [Complexity analysis of postprocessing](https://tommoa.github.io/ozgrav-research/analysis.pdf)
-- [Seminar abstract](https://tommoa.github.io/ozgrav-research/abstract.pdf)
+- Seminar
+  - [Seminar abstract](https://tommoa.github.io/ozgrav-research/abstract.pdf)
+  - [Seminar presentation](https://tommoa.github.io/ozgrav-research/seminar-presentation.pdf)
+  - [Seminar talk](https://tommoa.github.io/ozgrav-research/seminar-talk.pdf)
 
 ## Building benchmarks
 
