@@ -8,7 +8,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        path: ["proposal", "progress-report", "analysis", "abstract"]
+        path: 
+        - abstract
+        - analysis
+        - progress-report
+        - proposal
+        - seminar-presentation
+        - seminar-talk
     steps:
     - uses: actions/checkout@v2
     - uses: actions/cache@v2
