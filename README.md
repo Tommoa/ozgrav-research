@@ -18,7 +18,7 @@ The plan is to implement this data flow:
 There will be multiple components of this research repository, and links to all of them will be found in this section.
 
 - [Proposal](https://tommoa.github.io/ozgrav-research/proposal.pdf)
-- [Progress Report (2020/05/29)](https://tommoa.github.io/ozgrav-research/progress-2020-05-29.pdf)
+- [Progress Report (2020/05/29)](https://tommoa.github.io/ozgrav-research/progress-report.pdf)
 - [Callgraph for postprocessing](https://github.com/Tommoa/ozgrav-research/blob/master/resources/callgraph.png)
 - [Complexity analysis of postprocessing](https://tommoa.github.io/ozgrav-research/analysis.pdf)
 - Seminar
