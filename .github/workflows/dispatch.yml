@@ -1,6 +1,11 @@
 name: Dispatch to site
 
-on: [page_build, workflow_dispatch]
+on:
+  workflow_dispatch:
+  page_build:
+  push:
+    branches:
+      - gh-pages
 
 jobs:
   dispatch:
