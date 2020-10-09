@@ -1,0 +1,1364 @@
+From b4f563eb358b77f2e130aad6655db566a2f25b5a Mon Sep 17 00:00:00 2001
+From: Tom Almeida <tommoa256@gmail.com>
+Date: Thu, 20 Aug 2020 12:37:16 +0800
+Subject: [PATCH 1/2] pipe_macro: Make IFOComboMap index with bits indicating
+ which IFOs are being used
+
+Previously IFOComboMap was indexed as [single detector, two detectors,
+three detectors, ...]. This means that checking to see how many and
+which detectors are in use can't be easily done without referring back
+to the table, and any changes to the table can potentially break other
+parts of the code.
+
+This patch changes IFOComboMap to be indexed by powers of two. That
+means that any index of (2^i - 1) is a single detector, indicated by
+index into IFOMap. Now when using IFOComboMap, the number of detectors
+in use can be determined using `__builtin_popcount(icombo + 1)`, and
+whether a single detector is in use can be done with the check `index &
+(icombo + 1)`.
+---
+ .../gst/cuda/cohfar/background_stats_utils.c  | 50 +++++++++----------
+ .../gst/cuda/cohfar/cohfar_accumbackground.c  |  8 ++-
+ gstlal-spiir/gst/cuda/postcoh/postcoh.c       | 12 +++--
+ gstlal-spiir/include/pipe_macro.h             | 11 ++--
+ 4 files changed, 45 insertions(+), 36 deletions(-)
+
+diff --git a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
+index 4a5b7ec8..45c57ec6 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
++++ b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
+@@ -39,38 +39,34 @@
+ #define EPSILON        1e-6
+ 
+ int scan_trigger_ifos(int icombo, PostcohInspiralTable *trigger) {
+-    int cur_ifo = 0, one_ifo_size = sizeof(char) * IFO_LEN;
++    int nifo = 0, one_ifo_size = sizeof(char) * IFO_LEN;
+     char final_ifos[MAX_ALLIFO_LEN];
+     gboolean pass_test = TRUE;
+-    if ((icombo == 6 || icombo == 3 || icombo == 4)) { // H1L1, H1V1 or H1L1V1
+-        if (trigger->snglsnr_H > EPSILON) {
+-            strncpy(final_ifos + IFO_LEN * cur_ifo, "H1", one_ifo_size);
+-            cur_ifo++;
+-        } else
+-            pass_test = FALSE;
+-    }
+-
+-    if ((icombo == 6 || icombo == 3 || icombo == 5)) { // H1L1, L1V1 or H1L1V1
+-        if (trigger->snglsnr_L > EPSILON) {
+-            strncpy(final_ifos + IFO_LEN * cur_ifo, "L1", one_ifo_size);
+-            cur_ifo++;
+-        } else
+-            pass_test = FALSE;
+-    }
+-
+-    if ((icombo == 6 || icombo == 4 || icombo == 5)) { // H1V1, L1V1 or H1L1V1
+-        if (trigger->snglsnr_V > EPSILON) {
+-            strncpy(final_ifos + IFO_LEN * cur_ifo, "V1", one_ifo_size);
+-            cur_ifo++;
+-        } else
+-            pass_test = FALSE;
++    // [THA]: Because icombo is sum(1 << index) - 1, we should add one to it
++    // so that we don't need to add one in the loop.
++    ++icombo;
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        // [THA]: We can determine if the IFO at IFOMap[i] is in the icombo by
++        // checking if that power of two exists in the combo
++        if (icombo & (1 << i)) {
++            // [THA]: This is a check that the data from this IFO is actually
++            // valid. If it's not valid, the number will be very *very* small
++            if (*(&trigger->snglsnr_H + i) > EPSILON) {
++                strncpy(final_ifos + IFO_LEN * nifo, IFOMap[i].name,
++                        one_ifo_size);
++                nifo++;
++            } else {
++                pass_test = FALSE;
++            }
++        }
+     }
+     if (pass_test != TRUE) {
+-        strncpy(trigger->ifos, final_ifos, cur_ifo * sizeof(char) * IFO_LEN);
+-        trigger->ifos[IFO_LEN * cur_ifo] = '\0';
++        strncpy(trigger->ifos, final_ifos, nifo * one_ifo_size);
++        trigger->ifos[IFO_LEN * nifo] = '\0';
+         return get_icombo(trigger->ifos);
+-    } else
+-        return icombo;
++    } else {
++        return icombo - 1;
++    }
+ }
+ 
+ int get_icombo(char *ifos) {
+diff --git a/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c b/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
+index ef3136e0..154cbda1 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
++++ b/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
+@@ -223,6 +223,7 @@ static GstFlowReturn cohfar_accumbackground_chain(GstPad *pad,
+     int isingle, nifo;
+     for (; intable < intable_end; intable++) {
+         icombo = get_icombo(intable->ifos);
++        // The combination of IFOs is invalid
+         if (icombo < 0) {
+             LIGOTimeGPS ligo_time;
+             XLALINT8NSToGPS(&ligo_time, GST_BUFFER_TIMESTAMP(inbuf));
+@@ -245,7 +246,12 @@ static GstFlowReturn cohfar_accumbackground_chain(GstPad *pad,
+             outtable++;
+         } else {
+             /* increment livetime if participating nifo >= 2 */
+-            if (icombo > 2) {
++            // If icombo is a power of two, then there is only one participating
++            // IFO, thus we can use the property of `(x & (x-1)) != 0` to
++            // determine if we have more than one IFO participating
++            //
++            // Note that this is inverted because icombo is sum(1 << index) - 1
++            if ((icombo + 1) & icombo) {
+                 nifo = strlen(intable->ifos) / IFO_LEN;
+                 /* add single detector stats */
+                 get_write_ifo_mapping(IFOComboMap[icombo].name, nifo,
+diff --git a/gstlal-spiir/gst/cuda/postcoh/postcoh.c b/gstlal-spiir/gst/cuda/postcoh/postcoh.c
+index f724477b..85f071ff 100644
+--- a/gstlal-spiir/gst/cuda/postcoh/postcoh.c
++++ b/gstlal-spiir/gst/cuda/postcoh/postcoh.c
+@@ -667,16 +667,20 @@ static gboolean cuda_postcoh_sink_setcaps(GstPad *pad, GstCaps *caps) {
+         data        = gst_pad_get_element_private(pad);
+         set_offset_per_nanosecond(data, postcoh->offset_per_nanosecond);
+         set_channels(data, postcoh->channels);
+-        // FIXME: need to consider non-standard ifo indexing, like HV, need
+-        // testing
++        // [THA]: Non-standard IFO indexing (e.g. VH) works because `get_icombo`
++        // doesn't care about the ordering of IFOs
+         strncpy(state->all_ifos + IFO_LEN * i, data->ifo_name,
+                 sizeof(char) * IFO_LEN);
+     }
+     state->all_ifos[IFO_LEN * nifo] = '\0';
+-    state->ifo_combo_idx            = get_icombo(state->all_ifos);
++    // [THA]: This is the only place that ifo_combo_idx is used. Perhaps remove
++    // it later to save space?
++    state->ifo_combo_idx = get_icombo(state->all_ifos);
++    // [THA]: sizeof() only works for arrays that we've statically created, so
++    // we use strlen() to get the length of the combination name
+     /* overwrite all_ifos to be the same with the combo in the IFOComboMap */
+     strncpy(state->all_ifos, IFOComboMap[state->ifo_combo_idx].name,
+-            sizeof(IFOComboMap[state->ifo_combo_idx].name));
++            strlen(IFOComboMap[state->ifo_combo_idx].name));
+     state->all_ifos[IFO_LEN * nifo] = '\0';
+ 
+     /* initialize input_ifo_mapping, snglsnr matrix, and peak_list */
+diff --git a/gstlal-spiir/include/pipe_macro.h b/gstlal-spiir/include/pipe_macro.h
+index a6f20486..b6e0fc9a 100644
+--- a/gstlal-spiir/include/pipe_macro.h
++++ b/gstlal-spiir/include/pipe_macro.h
+@@ -13,13 +13,16 @@ typedef struct _IFOType {
+ } IFOType;
+ 
+ static const IFOType IFOMap[MAX_NIFO] = {
+-    { "H1", 0 },
+-    { "L1", 1 },
+-    { "V1", 2 },
++    { "H1", 0 }, // 1 << 0 = 1
++    { "L1", 1 }, // 1 << 1 = 2
++    { "V1", 2 }, // 1 << 2 = 4
+ };
+ #define MAX_IFO_COMBOS 7 // 2^3-1
++// A combination is sum(1 << index) - 1
++// This gives us some nice mathematical properties that we can use to check
++// if an IFO exists in a given ComboMap
+ static const IFOType IFOComboMap[MAX_IFO_COMBOS] = {
+-    { "H1", 0 },   { "L1", 1 },   { "V1", 2 },     { "H1L1", 3 },
++    { "H1", 0 },   { "L1", 1 },   { "H1L1", 2 },   { "V1", 3 },
+     { "H1V1", 4 }, { "L1V1", 5 }, { "H1L1V1", 6 },
+ };
+ /* function given a random ifo, output the index in the IFOComboMap list,
+-- 
+GitLab
+
+
+From 6f7f2e00c9630a4a615d6bec63953342f93d023f Mon Sep 17 00:00:00 2001
+From: Tom Almeida <tommoa256@gmail.com>
+Date: Wed, 26 Aug 2020 13:48:03 +0800
+Subject: [PATCH 2/2] cohfar: Reduce the size of outputted XML files by only
+ using active IFOs
+
+Previously, every possible combination of existing IFO was outputted as
+a part of the XML dump from `cohfar`. This meant that the size of the
+XML dump wasn't tied to the actual number of IFOs in use, and would
+continue to exponentially increase in size as we increased the number of
+IFOs that might be in play (e.g. KAGRA, LIGO-India, etc.).
+
+To solve this, we have moved to using the total combination (as an index
+into IFOComboMap) as a store of the active IFOs, and using
+`__builtin_popcount()` to get the total number of IFOs that are in use
+in that combination. This means that we can quickly and efficiently
+determine the maximum number of detectors that we actually need to print
+stats for, with no additional information required.
+
+-- Tom Almeida
+---
+ .../gst/cuda/cohfar/background_stats.h        |   9 +-
+ .../gst/cuda/cohfar/background_stats_utils.c  | 552 +++++++++---------
+ .../gst/cuda/cohfar/background_stats_utils.h  |   5 +-
+ .../gst/cuda/cohfar/cohfar_accumbackground.c  |  67 +--
+ .../gst/cuda/cohfar/cohfar_accumbackground.h  |   4 +-
+ .../gst/cuda/cohfar/cohfar_assignfar.c        |   6 +-
+ .../gst/cuda/cohfar/cohfar_assignfar.h        |   2 +-
+ .../gst/cuda/cohfar/cohfar_calc_fap.c         |  90 ++-
+ 8 files changed, 356 insertions(+), 379 deletions(-)
+
+diff --git a/gstlal-spiir/gst/cuda/cohfar/background_stats.h b/gstlal-spiir/gst/cuda/cohfar/background_stats.h
+index 40f50290..7f88f80e 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/background_stats.h
++++ b/gstlal-spiir/gst/cuda/cohfar/background_stats.h
+@@ -96,14 +96,7 @@ typedef struct {
+     TriggerStats **multistats;
+     GString *rank_xmlname;
+     GString *feature_xmlname;
+-    int ncombo;
++    int icombo;
+ } TriggerStatsXML;
+ 
+-typedef TriggerStats **TriggerStatsPointer;
+-typedef struct {
+-    TriggerStatsPointer *plist;
+-    int size;
+-    int pos;
+-} TriggerStatsPointerList;
+-
+ #endif /* __BACKGROUND_STATS_H__ */
+diff --git a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
+index 45c57ec6..449cf376 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
++++ b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
+@@ -1,5 +1,6 @@
+ /*
+- * Copyright (C) 2015 Qi Chu <qi.chu@ligo.org>
++ * Copyright (C) 2015 Qi Chu <qi.chu@ligo.org>,
++ *               2020 Tom Almeida <tom@tommoa.me>,
+  *
+  * Permission is hereby granted, free of charge, to any person obtaining a
+  * copy of this software and associated documentation files (the
+@@ -98,11 +99,6 @@ int get_icombo(char *ifos) {
+     return -1;
+ }
+ 
+-int get_ncombo(int nifo) {
+-    g_assert(pow(2, nifo) - 1 <= MAX_IFO_COMBOS);
+-    return MAX_IFO_COMBOS;
+-}
+-
+ Bins1D *bins1D_long_create(double cmin, double cmax, int nbin) {
+     Bins1D *bins = (Bins1D *)malloc(sizeof(Bins1D));
+     bins->cmin   = cmin;
+@@ -187,22 +183,23 @@ void bins2D_long_destroy(Bins2D *bins) {
+     free(bins);
+ }
+ 
+-void trigger_stats_reset(TriggerStats **multistats, int ncombo) {
+-    int icombo;
++void trigger_stats_reset(TriggerStats **multistats, int nifo) {
++    int ifo;
+     FeatureStats *feature;
+-    for (icombo = 0; icombo < ncombo; icombo++) {
+-        feature = multistats[icombo]->feature;
++    for (ifo = 0; ifo <= nifo; ifo++) {
++        feature = multistats[ifo]->feature;
+         gsl_vector_long_set_zero((gsl_vector_long *)feature->lgsnr_rate->data);
+         gsl_vector_long_set_zero(
+           (gsl_vector_long *)feature->lgchisq_rate->data);
+         gsl_matrix_long_set_zero(
+           (gsl_matrix_long *)feature->lgsnr_lgchisq_rate->data);
+-        multistats[icombo]->nevent   = 0;
+-        multistats[icombo]->livetime = 0;
++        multistats[ifo]->nevent   = 0;
++        multistats[ifo]->livetime = 0;
+     }
+ }
+ void trigger_stats_xml_reset(TriggerStatsXML *stats) {
+-    trigger_stats_reset(stats->multistats, stats->ncombo);
++    trigger_stats_reset(stats->multistats,
++                        __builtin_popcount(stats->icombo + 1));
+ }
+ 
+ FeatureStats *feature_stats_create() {
+@@ -254,32 +251,59 @@ void rank_stats_destroy(RankingStats *rank) {
+     free(rank);
+ }
+ 
+-TriggerStats **trigger_stats_create(int ncombo) {
++TriggerStats **trigger_stats_create(int icombo) {
++    // [THA]: We can see the number of detectors in a interferometer combination
++    // by checking the number of set bits in `icombo + 1`. We can do this
++    // because icombo is one less than the power of two combination of detectors
++    // (see `include/pipe_macro.h`)
++    int nifo = __builtin_popcount(icombo + 1);
++    // We only create TriggerStats for each individual IFO and their final
++    // total combination (e.g. (H1, L1, H1L1) or (H1, L1, V1, H1L1V1))
++    // Thus, the total number of combinations is the number of individual IFOs
++    // in the combo + 1
+     TriggerStats **multistats =
+-      (TriggerStats **)malloc(sizeof(TriggerStats *) * ncombo);
+-
+-    int icombo = 0;
+-    for (icombo = 0; icombo < ncombo; icombo++) {
+-        multistats[icombo]      = (TriggerStats *)malloc(sizeof(TriggerStats));
+-        TriggerStats *cur_stats = multistats[icombo];
+-        // FIXME: what if HV or LV combo
+-        // printf("len %s, %d\n", IFOComboMap[icombo].name,
+-        // strlen(IFOComboMap[icombo].name));
+-        cur_stats->ifos =
+-          malloc(strlen(IFOComboMap[icombo].name) * sizeof(char));
+-        strncpy(cur_stats->ifos, IFOComboMap[icombo].name,
+-                strlen(IFOComboMap[icombo].name) * sizeof(char));
+-        // create feature
+-        cur_stats->feature = feature_stats_create();
+-        // our rank, cdf
+-        cur_stats->rank     = rank_stats_create();
+-        cur_stats->nevent   = 0;
+-        cur_stats->livetime = 0;
++      (TriggerStats **)malloc(sizeof(TriggerStats *) * (nifo + 1));
++
++    // Allocate for the final combination (all IFOs together)
++    multistats[nifo]        = (TriggerStats *)malloc(sizeof(TriggerStats));
++    TriggerStats *cur_stats = multistats[nifo];
++    cur_stats->ifos =
++      malloc(strlen(IFOComboMap[icombo].name) * sizeof(char) + 1);
++    strncpy(cur_stats->ifos, IFOComboMap[icombo].name,
++            strlen(IFOComboMap[icombo].name) * sizeof(char) + 1);
++    // create feature
++    cur_stats->feature = feature_stats_create();
++    // our rank, cdf
++    cur_stats->rank     = rank_stats_create();
++    cur_stats->nevent   = 0;
++    cur_stats->livetime = 0;
++
++    // Individual IFOs
++    int ifo = 0, index = 0;
++    ++icombo;
++    for (ifo = 0; ifo < MAX_NIFO; ifo++) {
++        // Is this IFO in the combo?
++        if (icombo & (1 << ifo)) {
++            multistats[index] = (TriggerStats *)malloc(sizeof(TriggerStats));
++            cur_stats         = multistats[index];
++            cur_stats->ifos =
++              malloc(strlen(IFOMap[ifo].name) * sizeof(char) + 1);
++            strncpy(cur_stats->ifos, IFOMap[ifo].name,
++                    strlen(IFOMap[ifo].name) * sizeof(char) + 1);
++            // create feature
++            cur_stats->feature = feature_stats_create();
++            // our rank, cdf
++            cur_stats->rank     = rank_stats_create();
++            cur_stats->nevent   = 0;
++            cur_stats->livetime = 0;
++            ++index;
++        }
+     }
+     return multistats;
+ }
+ 
+ TriggerStatsXML *trigger_stats_xml_create(char *ifos, int stats_type) {
++    // Create the XML document for tracking trigger stats
+     TriggerStatsXML *stats = (TriggerStatsXML *)malloc(sizeof(TriggerStatsXML));
+     if (stats_type == STATS_XML_TYPE_BACKGROUND) {
+         stats->feature_xmlname = g_string_new(BACKGROUND_XML_FEATURE_NAME);
+@@ -293,18 +317,15 @@ TriggerStatsXML *trigger_stats_xml_create(char *ifos, int stats_type) {
+         printf("create sgstats %s\n", stats->feature_xmlname->str);
+     }
+ 
+-    int nifo          = strlen(ifos) / IFO_LEN;
+-    int ncombo        = get_ncombo(nifo);
+-    stats->multistats = trigger_stats_create(ncombo);
+-    stats->ncombo     = ncombo;
++    int icombo        = get_icombo(ifos);
++    stats->multistats = trigger_stats_create(icombo);
++    stats->icombo     = icombo;
+     return stats;
+ }
+ 
+-void trigger_stats_destroy(TriggerStats **multistats, int ncombo) {
+-    int icombo = 0;
+-
+-    for (icombo = 0; icombo < ncombo; icombo++) {
+-        TriggerStats *cur_stats = multistats[icombo];
++void trigger_stats_destroy(TriggerStats **multistats, int nifo) {
++    for (int ifo = 0; ifo <= nifo; ifo++) {
++        TriggerStats *cur_stats = multistats[ifo];
+         feature_stats_destroy(cur_stats->feature);
+         cur_stats->feature = NULL;
+         rank_stats_destroy(cur_stats->rank);
+@@ -320,41 +341,9 @@ void trigger_stats_destroy(TriggerStats **multistats, int ncombo) {
+ void trigger_stats_xml_destroy(TriggerStatsXML *stats) {
+     g_string_free(stats->feature_xmlname, TRUE);
+     g_string_free(stats->rank_xmlname, TRUE);
+-    trigger_stats_destroy(stats->multistats, stats->ncombo);
+-}
+-
+-TriggerStatsPointerList *trigger_stats_list_create(char *ifos) {
+-    int nifo = 0, ncombo = 0, icombo = 0;
+-    nifo = strlen(ifos) / IFO_LEN;
+-
+-    ncombo = get_ncombo(nifo);
+-    TriggerStatsPointerList *stats_list =
+-      (TriggerStatsPointerList *)malloc(sizeof(TriggerStatsPointerList));
+-    stats_list->size  = NSTATS_TO_PROMPT;
+-    stats_list->pos   = 0;
+-    stats_list->plist = (TriggerStatsPointer *)malloc(
+-      sizeof(TriggerStatsPointer) * NSTATS_TO_PROMPT);
+-
+-    int ilist            = 0;
+-    TriggerStats **stats = NULL;
+-
+-    for (ilist = 0; ilist < NSTATS_TO_PROMPT; ilist++) {
+-        stats = (TriggerStats **)malloc(sizeof(TriggerStats *) * ncombo);
+-        for (icombo = 0; icombo < ncombo; icombo++) {
+-            stats[icombo] = (TriggerStats *)malloc(sizeof(TriggerStats));
+-            TriggerStats *cur_stats = stats[icombo];
+-            // printf("len %s, %d\n", IFOComboMap[icombo].name,
+-            // strlen(IFOComboMap[icombo].name));
+-            cur_stats->ifos =
+-              malloc(strlen(IFOComboMap[icombo].name) * sizeof(char));
+-            strncpy(cur_stats->ifos, IFOComboMap[icombo].name,
+-                    strlen(IFOComboMap[icombo].name) * sizeof(char));
+-            cur_stats->nevent   = 0;
+-            cur_stats->livetime = 0;
+-        }
+-        stats_list->plist[ilist] = stats;
+-    }
+-    return stats_list;
++    trigger_stats_destroy(stats->multistats,
++                          __builtin_popcount(stats->icombo + 1));
++    free(stats);
+ }
+ 
+ /*
+@@ -434,14 +423,14 @@ void trigger_stats_feature_rate_add(FeatureStats *feature1,
+ 
+ void trigger_stats_livetime_add(TriggerStats **stats_out,
+                                 TriggerStats **stats_in,
+-                                const int icombo) {
+-    stats_out[icombo]->livetime += stats_in[icombo]->livetime;
++                                const int index) {
++    stats_out[index]->livetime += stats_in[index]->livetime;
+ }
+ /*
+  * background pdf direnctly from rate
+  */
+-void trigger_stats_livetime_inc(TriggerStats **stats, const int icombo) {
+-    stats[icombo]->livetime += 1;
++void trigger_stats_livetime_inc(TriggerStats **stats, const int index) {
++    stats[index]->livetime += 1;
+ }
+ 
+ void trigger_stats_feature_rate_to_pdf_hist(FeatureStats *feature,
+@@ -751,10 +740,10 @@ static void signal_stats_gen_ratemap_from_pdf(FeatureStats *feature) {
+ }
+ 
+ void signal_stats_init(TriggerStatsXML *sgstats, int source_type) {
+-    int icombo, ncombo = sgstats->ncombo;
++    int ifo, nifo = __builtin_popcount(sgstats->icombo + 1);
+     if (source_type == SOURCE_TYPE_BNS) {
+-        for (icombo = 0; icombo < ncombo; icombo++) {
+-            TriggerStats *stats = sgstats->multistats[icombo];
++        for (ifo = 0; ifo <= nifo; ifo++) {
++            TriggerStats *stats = sgstats->multistats[ifo];
+             signal_stats_gen_pdfmap(stats->feature->lgsnr_lgchisq_pdf);
+             signal_stats_gen_ratemap_from_pdf(stats->feature);
+         }
+@@ -999,99 +988,108 @@ gboolean trigger_stats_xml_from_xml(TriggerStatsXML *stats,
+     if (!g_file_test(filename, G_FILE_TEST_EXISTS)) { return FALSE; }
+ 
+     int nelem  = 10; // 4 for feature, 4 for rank, 2 for nevent,livetime
+-    int ncombo = stats->ncombo;
+-    int nnode  = ncombo * nelem + 1, icombo; // 1 for hist_trials
++    int icombo = stats->icombo;
++    int nifo   = __builtin_popcount(icombo + 1);
++    int nodes  = nifo + 1; // top level nodes
++    int nnode  = nodes * nelem + 1, combo; // 1 for hist_trials
+     /* read rate */
+ 
+     XmlNodeStruct *xns = (XmlNodeStruct *)malloc(sizeof(XmlNodeStruct) * nnode);
+-    XmlArray *array_lgsnr_rate = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlArray *array_lgchisq_rate =
+-      (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
++    XmlArray *array_lgsnr_rate   = (XmlArray *)malloc(sizeof(XmlArray) * nodes);
++    XmlArray *array_lgchisq_rate = (XmlArray *)malloc(sizeof(XmlArray) * nodes);
+     XmlArray *array_lgsnr_lgchisq_rate =
+-      (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
++      (XmlArray *)malloc(sizeof(XmlArray) * nodes);
+     XmlArray *array_lgsnr_lgchisq_pdf =
+-      (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlArray *array_rank_map  = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlParam *param_nevent    = (XmlParam *)malloc(sizeof(XmlParam) * ncombo);
+-    XmlParam *param_livetime  = (XmlParam *)malloc(sizeof(XmlParam) * ncombo);
+-    XmlArray *array_rank_rate = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlArray *array_rank_pdf  = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlArray *array_rank_fap  = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-
+-    int pos_xns;
+-    for (icombo = 0; icombo < ncombo; icombo++) {
+-        pos_xns = icombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
+-                stats->feature_xmlname->str, IFOComboMap[icombo].name,
+-                SNR_RATE_SUFFIX);
+-        xns[pos_xns].processPtr = readArray;
+-        xns[pos_xns].data       = &(array_lgsnr_rate[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
+-                stats->feature_xmlname->str, IFOComboMap[icombo].name,
+-                CHISQ_RATE_SUFFIX);
+-        xns[pos_xns].processPtr = readArray;
+-        xns[pos_xns].data       = &(array_lgchisq_rate[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
+-                stats->feature_xmlname->str, IFOComboMap[icombo].name,
+-                SNR_CHISQ_RATE_SUFFIX);
+-        xns[pos_xns].processPtr = readArray;
+-        xns[pos_xns].data       = &(array_lgsnr_lgchisq_rate[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
+-                stats->feature_xmlname->str, IFOComboMap[icombo].name,
+-                SNR_CHISQ_PDF_SUFFIX);
+-        xns[pos_xns].processPtr = readArray;
+-        xns[pos_xns].data       = &(array_lgsnr_lgchisq_pdf[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
+-                stats->rank_xmlname->str, IFOComboMap[icombo].name,
+-                RANK_MAP_SUFFIX);
+-        xns[pos_xns].processPtr = readArray;
+-        xns[pos_xns].data       = &(array_rank_map[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_nevent:param",
+-                stats->feature_xmlname->str, IFOComboMap[icombo].name);
+-        xns[pos_xns].processPtr = readParam;
+-        xns[pos_xns].data       = &(param_nevent[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_livetime:param",
+-                stats->feature_xmlname->str, IFOComboMap[icombo].name);
+-        xns[pos_xns].processPtr = readParam;
+-        xns[pos_xns].data       = &(param_livetime[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
+-                stats->rank_xmlname->str, IFOComboMap[icombo].name,
+-                RANK_RATE_SUFFIX);
+-        xns[pos_xns].processPtr = readArray;
+-        xns[pos_xns].data       = &(array_rank_rate[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
+-                stats->rank_xmlname->str, IFOComboMap[icombo].name,
+-                RANK_PDF_SUFFIX);
+-        xns[pos_xns].processPtr = readArray;
+-        xns[pos_xns].data       = &(array_rank_pdf[icombo]);
+-
+-        pos_xns += ncombo;
+-        sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
+-                stats->rank_xmlname->str, IFOComboMap[icombo].name,
+-                RANK_FAP_SUFFIX);
+-        xns[pos_xns].processPtr = readArray;
+-        xns[pos_xns].data       = &(array_rank_fap[icombo]);
++      (XmlArray *)malloc(sizeof(XmlArray) * nodes);
++    XmlArray *array_rank_map  = (XmlArray *)malloc(sizeof(XmlArray) * nodes);
++    XmlParam *param_nevent    = (XmlParam *)malloc(sizeof(XmlParam) * nodes);
++    XmlParam *param_livetime  = (XmlParam *)malloc(sizeof(XmlParam) * nodes);
++    XmlArray *array_rank_rate = (XmlArray *)malloc(sizeof(XmlArray) * nodes);
++    XmlArray *array_rank_pdf  = (XmlArray *)malloc(sizeof(XmlArray) * nodes);
++    XmlArray *array_rank_fap  = (XmlArray *)malloc(sizeof(XmlArray) * nodes);
++
++    // [THA]: We hold `index` to be the index into the various arrays that we
++    // index for printing. We also only have this many (+1)s because icombo
++    // starts from 0 and we need to make sure that the 0th combo & icombo != 0
++    // if its not in the actual combo. Thus we add 1 to get the "actual"
++    // combination and just use combo for indexing the combomap
++    int pos_xns, index;
++    for (combo = 0, index = 0; combo < icombo + 1; combo++) {
++        if ((combo + 1) & (icombo + 1) == combo + 1) {
++            pos_xns = index;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
++                    stats->feature_xmlname->str, IFOComboMap[combo].name,
++                    SNR_RATE_SUFFIX);
++            xns[pos_xns].processPtr = readArray;
++            xns[pos_xns].data       = &(array_lgsnr_rate[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
++                    stats->feature_xmlname->str, IFOComboMap[combo].name,
++                    CHISQ_RATE_SUFFIX);
++            xns[pos_xns].processPtr = readArray;
++            xns[pos_xns].data       = &(array_lgchisq_rate[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
++                    stats->feature_xmlname->str, IFOComboMap[combo].name,
++                    SNR_CHISQ_RATE_SUFFIX);
++            xns[pos_xns].processPtr = readArray;
++            xns[pos_xns].data       = &(array_lgsnr_lgchisq_rate[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
++                    stats->feature_xmlname->str, IFOComboMap[combo].name,
++                    SNR_CHISQ_PDF_SUFFIX);
++            xns[pos_xns].processPtr = readArray;
++            xns[pos_xns].data       = &(array_lgsnr_lgchisq_pdf[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
++                    stats->rank_xmlname->str, IFOComboMap[combo].name,
++                    RANK_MAP_SUFFIX);
++            xns[pos_xns].processPtr = readArray;
++            xns[pos_xns].data       = &(array_rank_map[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_nevent:param",
++                    stats->feature_xmlname->str, IFOComboMap[combo].name);
++            xns[pos_xns].processPtr = readParam;
++            xns[pos_xns].data       = &(param_nevent[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_livetime:param",
++                    stats->feature_xmlname->str, IFOComboMap[combo].name);
++            xns[pos_xns].processPtr = readParam;
++            xns[pos_xns].data       = &(param_livetime[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
++                    stats->rank_xmlname->str, IFOComboMap[combo].name,
++                    RANK_RATE_SUFFIX);
++            xns[pos_xns].processPtr = readArray;
++            xns[pos_xns].data       = &(array_rank_rate[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
++                    stats->rank_xmlname->str, IFOComboMap[combo].name,
++                    RANK_PDF_SUFFIX);
++            xns[pos_xns].processPtr = readArray;
++            xns[pos_xns].data       = &(array_rank_pdf[index]);
++
++            pos_xns += nifo;
++            sprintf((char *)xns[pos_xns].tag, "%s:%s_%s:array",
++                    stats->rank_xmlname->str, IFOComboMap[combo].name,
++                    RANK_FAP_SUFFIX);
++            xns[pos_xns].processPtr = readArray;
++            xns[pos_xns].data       = &(array_rank_fap[index]);
++            index += 1;
++        }
+     }
+ 
+     XmlParam *param_hist_trials = (XmlParam *)malloc(sizeof(XmlParam) * 1);
+ 
+-    pos_xns            = nelem * ncombo;
++    pos_xns            = nelem * nifo;
+     GString *hist_name = g_string_new(NULL);
+     g_string_printf(hist_name, "%s:hist_trials:param",
+                     stats->feature_xmlname->str);
+@@ -1116,32 +1114,32 @@ gboolean trigger_stats_xml_from_xml(TriggerStatsXML *stats,
+     g_assert(array_lgsnr_rate[0].dim[0] == nbin_x);
+     g_assert(array_lgchisq_rate[0].dim[0] == nbin_y);
+ 
+-    for (icombo = 0; icombo < ncombo; icombo++) {
+-        TriggerStats *cur_stats = multistats[icombo];
++    for (index = 0; index < nifo; index++) {
++        TriggerStats *cur_stats = multistats[index];
+         FeatureStats *feature   = cur_stats->feature;
+         RankingStats *rank      = cur_stats->rank;
+         memcpy(((gsl_vector_long *)feature->lgsnr_rate->data)->data,
+-               (long *)array_lgsnr_rate[icombo].data, x_size);
++               (long *)array_lgsnr_rate[index].data, x_size);
+         memcpy(((gsl_vector_long *)feature->lgchisq_rate->data)->data,
+-               (long *)array_lgchisq_rate[icombo].data, y_size);
++               (long *)array_lgchisq_rate[index].data, y_size);
+         memcpy(((gsl_matrix_long *)feature->lgsnr_lgchisq_rate->data)->data,
+-               (long *)array_lgsnr_lgchisq_rate[icombo].data, xy_size);
++               (long *)array_lgsnr_lgchisq_rate[index].data, xy_size);
+         memcpy(((gsl_matrix *)feature->lgsnr_lgchisq_pdf->data)->data,
+-               array_lgsnr_lgchisq_pdf[icombo].data, xy_size);
++               array_lgsnr_lgchisq_pdf[index].data, xy_size);
+ 
+         memcpy(((gsl_matrix *)rank->rank_map->data)->data,
+-               array_rank_map[icombo].data, xy_size);
++               array_rank_map[index].data, xy_size);
+         memcpy(((gsl_vector_long *)rank->rank_rate->data)->data,
+-               (long *)array_rank_rate[icombo].data, y_size);
++               (long *)array_rank_rate[index].data, y_size);
+         memcpy(((gsl_vector *)rank->rank_pdf->data)->data,
+-               (long *)array_rank_pdf[icombo].data, y_size);
++               (long *)array_rank_pdf[index].data, y_size);
+         memcpy(((gsl_vector *)rank->rank_fap->data)->data,
+-               (long *)array_rank_fap[icombo].data, y_size);
+-        cur_stats->nevent   = *((long *)param_nevent[icombo].data);
+-        cur_stats->livetime = *((long *)param_livetime[icombo].data);
++               (long *)array_rank_fap[index].data, y_size);
++        cur_stats->nevent   = *((long *)param_nevent[index].data);
++        cur_stats->livetime = *((long *)param_livetime[index].data);
+         // printf("filename %s, icombo %d, fap addr %p\n", filename, icombo,
+-        // ((gsl_matrix *)cur_stats->fap->data)->data); printf("icombo %d, nevent
+-        // addr %p, %p\n", icombo, (param_nevent[icombo].data),
++        // ((gsl_matrix *)cur_stats->fap->data)->data); printf("icombo %d,
++        // nevent addr %p, %p\n", icombo, (param_nevent[icombo].data),
+         // (&(param_nevent[icombo]))->data);
+     }
+     *hist_trials = *((int *)param_hist_trials->data);
+@@ -1160,17 +1158,17 @@ gboolean trigger_stats_xml_from_xml(TriggerStatsXML *stats,
+     /*
+      * free the allocated memory for xml reading
+      */
+-    for (icombo = 0; icombo < ncombo; icombo++) {
+-        free(array_lgsnr_rate[icombo].data);
+-        free(array_lgchisq_rate[icombo].data);
+-        free(array_lgsnr_lgchisq_rate[icombo].data);
+-        free(array_lgsnr_lgchisq_pdf[icombo].data);
+-        free(param_nevent[icombo].data);
+-        free(param_livetime[icombo].data);
+-        free(array_rank_map[icombo].data);
+-        free(array_rank_rate[icombo].data);
+-        free(array_rank_pdf[icombo].data);
+-        free(array_rank_fap[icombo].data);
++    for (index = 0; index < nifo; index++) {
++        free(array_lgsnr_rate[index].data);
++        free(array_lgchisq_rate[index].data);
++        free(array_lgsnr_lgchisq_rate[index].data);
++        free(array_lgsnr_lgchisq_pdf[index].data);
++        free(param_nevent[index].data);
++        free(param_livetime[index].data);
++        free(array_rank_map[index].data);
++        free(array_rank_rate[index].data);
++        free(array_rank_pdf[index].data);
++        free(array_rank_fap[index].data);
+     }
+     free(array_lgsnr_rate);
+     free(array_lgchisq_rate);
+@@ -1293,18 +1291,19 @@ gboolean trigger_stats_xml_dump(TriggerStatsXML *stats,
+     }
+     printf("write %s\n", stats->rank_xmlname->str);
+     xmlTextWriterPtr writer = *pwriter;
+-    int icombo = 0, ncombo = stats->ncombo;
+-    XmlArray *array_lgsnr_rate = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
++    int ifo = 0, nifo = __builtin_popcount(stats->icombo + 1);
++    int nnodes                 = nifo + 1;
++    XmlArray *array_lgsnr_rate = (XmlArray *)malloc(sizeof(XmlArray) * nnodes);
+     XmlArray *array_lgchisq_rate =
+-      (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
++      (XmlArray *)malloc(sizeof(XmlArray) * nnodes);
+     XmlArray *array_lgsnr_lgchisq_rate =
+-      (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
++      (XmlArray *)malloc(sizeof(XmlArray) * nnodes);
+     XmlArray *array_lgsnr_lgchisq_pdf =
+-      (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlArray *array_rank_map  = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlArray *array_rank_rate = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlArray *array_rank_pdf  = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
+-    XmlArray *array_rank_fap  = (XmlArray *)malloc(sizeof(XmlArray) * ncombo);
++      (XmlArray *)malloc(sizeof(XmlArray) * nnodes);
++    XmlArray *array_rank_map  = (XmlArray *)malloc(sizeof(XmlArray) * nnodes);
++    XmlArray *array_rank_rate = (XmlArray *)malloc(sizeof(XmlArray) * nnodes);
++    XmlArray *array_rank_pdf  = (XmlArray *)malloc(sizeof(XmlArray) * nnodes);
++    XmlArray *array_rank_fap  = (XmlArray *)malloc(sizeof(XmlArray) * nnodes);
+ 
+     TriggerStats **multistats = stats->multistats;
+     int nbin_x = multistats[0]->feature->lgsnr_lgchisq_pdf->nbin_x,
+@@ -1312,61 +1311,61 @@ gboolean trigger_stats_xml_dump(TriggerStatsXML *stats,
+     int x_size = sizeof(double) * nbin_x, y_size = sizeof(double) * nbin_y;
+     int xy_size = sizeof(double) * nbin_x * nbin_y;
+ 
+-    for (icombo = 0; icombo < ncombo; icombo++) {
+-        TriggerStats *cur_stats = multistats[icombo];
++    for (ifo = 0; ifo < nnodes; ifo++) {
++        TriggerStats *cur_stats = multistats[ifo];
+         FeatureStats *feature   = cur_stats->feature;
+         RankingStats *rank      = cur_stats->rank;
+         // assemble lgsnr_rate
+-        array_lgsnr_rate[icombo].ndim   = 1;
+-        array_lgsnr_rate[icombo].dim[0] = nbin_x;
+-        array_lgsnr_rate[icombo].data   = (long *)malloc(x_size);
+-        memcpy(array_lgsnr_rate[icombo].data,
++        array_lgsnr_rate[ifo].ndim   = 1;
++        array_lgsnr_rate[ifo].dim[0] = nbin_x;
++        array_lgsnr_rate[ifo].data   = (long *)malloc(x_size);
++        memcpy(array_lgsnr_rate[ifo].data,
+                ((gsl_vector_long *)feature->lgsnr_rate->data)->data, x_size);
+         // assemble lgchisq_rate
+-        array_lgchisq_rate[icombo].ndim   = 1;
+-        array_lgchisq_rate[icombo].dim[0] = nbin_y;
+-        array_lgchisq_rate[icombo].data   = (long *)malloc(y_size);
+-        memcpy(array_lgchisq_rate[icombo].data,
++        array_lgchisq_rate[ifo].ndim   = 1;
++        array_lgchisq_rate[ifo].dim[0] = nbin_y;
++        array_lgchisq_rate[ifo].data   = (long *)malloc(y_size);
++        memcpy(array_lgchisq_rate[ifo].data,
+                ((gsl_vector_long *)feature->lgchisq_rate->data)->data, y_size);
+         // assemble lgsnr_lgchisq_rate
+-        array_lgsnr_lgchisq_rate[icombo].ndim   = 2;
+-        array_lgsnr_lgchisq_rate[icombo].dim[0] = nbin_x;
+-        array_lgsnr_lgchisq_rate[icombo].dim[1] = nbin_y;
+-        array_lgsnr_lgchisq_rate[icombo].data   = (long *)malloc(xy_size);
+-        memcpy(array_lgsnr_lgchisq_rate[icombo].data,
++        array_lgsnr_lgchisq_rate[ifo].ndim   = 2;
++        array_lgsnr_lgchisq_rate[ifo].dim[0] = nbin_x;
++        array_lgsnr_lgchisq_rate[ifo].dim[1] = nbin_y;
++        array_lgsnr_lgchisq_rate[ifo].data   = (long *)malloc(xy_size);
++        memcpy(array_lgsnr_lgchisq_rate[ifo].data,
+                ((gsl_matrix_long *)feature->lgsnr_lgchisq_rate->data)->data,
+                xy_size);
+         // aseemble lgsnr_lgchisq_pdf
+-        array_lgsnr_lgchisq_pdf[icombo].ndim   = 2;
+-        array_lgsnr_lgchisq_pdf[icombo].dim[0] = nbin_x;
+-        array_lgsnr_lgchisq_pdf[icombo].dim[1] = nbin_y;
+-        array_lgsnr_lgchisq_pdf[icombo].data   = (double *)malloc(xy_size);
+-        memcpy(array_lgsnr_lgchisq_pdf[icombo].data,
++        array_lgsnr_lgchisq_pdf[ifo].ndim   = 2;
++        array_lgsnr_lgchisq_pdf[ifo].dim[0] = nbin_x;
++        array_lgsnr_lgchisq_pdf[ifo].dim[1] = nbin_y;
++        array_lgsnr_lgchisq_pdf[ifo].data   = (double *)malloc(xy_size);
++        memcpy(array_lgsnr_lgchisq_pdf[ifo].data,
+                ((gsl_matrix *)feature->lgsnr_lgchisq_pdf->data)->data, xy_size);
+         // assemble rank_map
+-        array_rank_map[icombo].ndim   = 2;
+-        array_rank_map[icombo].dim[0] = nbin_x;
+-        array_rank_map[icombo].dim[1] = nbin_y;
+-        array_rank_map[icombo].data   = (double *)malloc(x_size * y_size);
+-        memcpy(array_rank_map[icombo].data,
++        array_rank_map[ifo].ndim   = 2;
++        array_rank_map[ifo].dim[0] = nbin_x;
++        array_rank_map[ifo].dim[1] = nbin_y;
++        array_rank_map[ifo].data   = (double *)malloc(x_size * y_size);
++        memcpy(array_rank_map[ifo].data,
+                ((gsl_matrix *)rank->rank_map->data)->data, xy_size);
+         // assemble rank_rate
+-        array_rank_rate[icombo].ndim   = 1;
+-        array_rank_rate[icombo].dim[0] = nbin_x;
+-        array_rank_rate[icombo].data   = (long *)malloc(x_size);
+-        memcpy(array_rank_rate[icombo].data,
++        array_rank_rate[ifo].ndim   = 1;
++        array_rank_rate[ifo].dim[0] = nbin_x;
++        array_rank_rate[ifo].data   = (long *)malloc(x_size);
++        memcpy(array_rank_rate[ifo].data,
+                ((gsl_vector_long *)rank->rank_rate->data)->data, x_size);
+         // assemble rank_pdf
+-        array_rank_pdf[icombo].ndim   = 1;
+-        array_rank_pdf[icombo].dim[0] = nbin_x;
+-        array_rank_pdf[icombo].data   = (double *)malloc(x_size);
+-        memcpy(array_rank_pdf[icombo].data,
++        array_rank_pdf[ifo].ndim   = 1;
++        array_rank_pdf[ifo].dim[0] = nbin_x;
++        array_rank_pdf[ifo].data   = (double *)malloc(x_size);
++        memcpy(array_rank_pdf[ifo].data,
+                ((gsl_vector *)rank->rank_pdf->data)->data, x_size);
+         // assemble rank_fap_
+-        array_rank_fap[icombo].ndim   = 1;
+-        array_rank_fap[icombo].dim[0] = nbin_x;
+-        array_rank_fap[icombo].data   = (double *)malloc(x_size);
+-        memcpy(array_rank_fap[icombo].data,
++        array_rank_fap[ifo].ndim   = 1;
++        array_rank_fap[ifo].dim[0] = nbin_x;
++        array_rank_fap[ifo].data   = (double *)malloc(x_size);
++        memcpy(array_rank_fap[ifo].data,
+                ((gsl_vector *)rank->rank_fap->data)->data, x_size);
+     }
+ 
+@@ -1409,63 +1408,58 @@ gboolean trigger_stats_xml_dump(TriggerStatsXML *stats,
+ 
+     GString *array_name = g_string_new(NULL);
+     GString *param_name = g_string_new(NULL);
+-    for (icombo = 0; icombo < ncombo; icombo++) {
++    for (ifo = 0; ifo < nnodes; ifo++) {
+         // write features
+         g_string_printf(array_name, "%s:%s_%s:array",
+-                        stats->feature_xmlname->str, IFOComboMap[icombo].name,
++                        stats->feature_xmlname->str, multistats[ifo]->ifos,
+                         SNR_RATE_SUFFIX);
+-        ligoxml_write_Array(writer, &(array_lgsnr_rate[icombo]),
+-                            BAD_CAST "int_8s", BAD_CAST " ",
+-                            BAD_CAST array_name->str);
++        ligoxml_write_Array(writer, &(array_lgsnr_rate[ifo]), BAD_CAST "int_8s",
++                            BAD_CAST " ", BAD_CAST array_name->str);
+         g_string_printf(array_name, "%s:%s_%s:array",
+-                        stats->feature_xmlname->str, IFOComboMap[icombo].name,
++                        stats->feature_xmlname->str, multistats[ifo]->ifos,
+                         CHISQ_RATE_SUFFIX);
+-        ligoxml_write_Array(writer, &(array_lgchisq_rate[icombo]),
++        ligoxml_write_Array(writer, &(array_lgchisq_rate[ifo]),
+                             BAD_CAST "int_8s", BAD_CAST " ",
+                             BAD_CAST array_name->str);
+         g_string_printf(array_name, "%s:%s_%s:array",
+-                        stats->feature_xmlname->str, IFOComboMap[icombo].name,
++                        stats->feature_xmlname->str, multistats[ifo]->ifos,
+                         SNR_CHISQ_RATE_SUFFIX);
+-        ligoxml_write_Array(writer, &(array_lgsnr_lgchisq_rate[icombo]),
++        ligoxml_write_Array(writer, &(array_lgsnr_lgchisq_rate[ifo]),
+                             BAD_CAST "int_8s", BAD_CAST " ",
+                             BAD_CAST array_name->str);
+         g_string_printf(array_name, "%s:%s_%s:array",
+-                        stats->feature_xmlname->str, IFOComboMap[icombo].name,
++                        stats->feature_xmlname->str, multistats[ifo]->ifos,
+                         SNR_CHISQ_PDF_SUFFIX);
+-        ligoxml_write_Array(writer, &(array_lgsnr_lgchisq_pdf[icombo]),
++        ligoxml_write_Array(writer, &(array_lgsnr_lgchisq_pdf[ifo]),
+                             BAD_CAST "real_8", BAD_CAST " ",
+                             BAD_CAST array_name->str);
+ 
+         // write rank
+         g_string_printf(array_name, "%s:%s_%s:array", stats->rank_xmlname->str,
+-                        IFOComboMap[icombo].name, RANK_MAP_SUFFIX);
+-        ligoxml_write_Array(writer, &(array_rank_map[icombo]),
+-                            BAD_CAST "real_8", BAD_CAST " ",
+-                            BAD_CAST array_name->str);
++                        multistats[ifo]->ifos, RANK_MAP_SUFFIX);
++        ligoxml_write_Array(writer, &(array_rank_map[ifo]), BAD_CAST "real_8",
++                            BAD_CAST " ", BAD_CAST array_name->str);
+         g_string_printf(array_name, "%s:%s_%s:array", stats->rank_xmlname->str,
+-                        IFOComboMap[icombo].name, RANK_RATE_SUFFIX);
+-        ligoxml_write_Array(writer, &(array_rank_rate[icombo]),
+-                            BAD_CAST "int_8s", BAD_CAST " ",
+-                            BAD_CAST array_name->str);
++                        multistats[ifo]->ifos, RANK_RATE_SUFFIX);
++        ligoxml_write_Array(writer, &(array_rank_rate[ifo]), BAD_CAST "int_8s",
++                            BAD_CAST " ", BAD_CAST array_name->str);
+         g_string_printf(array_name, "%s:%s_%s:array", stats->rank_xmlname->str,
+-                        IFOComboMap[icombo].name, RANK_PDF_SUFFIX);
+-        ligoxml_write_Array(writer, &(array_rank_pdf[icombo]),
+-                            BAD_CAST "real_8", BAD_CAST " ",
+-                            BAD_CAST array_name->str);
++                        multistats[ifo]->ifos, RANK_PDF_SUFFIX);
++        ligoxml_write_Array(writer, &(array_rank_pdf[ifo]), BAD_CAST "real_8",
++                            BAD_CAST " ", BAD_CAST array_name->str);
+         g_string_printf(array_name, "%s:%s_%s:array", stats->rank_xmlname->str,
+-                        IFOComboMap[icombo].name, RANK_FAP_SUFFIX);
+-        ligoxml_write_Array(writer, &(array_rank_fap[icombo]),
+-                            BAD_CAST "real_8", BAD_CAST " ",
+-                            BAD_CAST array_name->str);
++                        multistats[ifo]->ifos, RANK_FAP_SUFFIX);
++        ligoxml_write_Array(writer, &(array_rank_fap[ifo]), BAD_CAST "real_8",
++                            BAD_CAST " ", BAD_CAST array_name->str);
+ 
+         g_string_printf(param_name, "%s:%s_nevent:param",
+-                        stats->feature_xmlname->str, IFOComboMap[icombo].name);
+-        ((long *)param_nevent.data)[0] = multistats[icombo]->nevent;
++                        stats->feature_xmlname->str, multistats[ifo]->ifos);
++        ((long *)param_nevent.data)[0] = multistats[ifo]->nevent;
+         ligoxml_write_Param(writer, &param_nevent, BAD_CAST "int_8s",
+                             BAD_CAST param_name->str);
+         g_string_printf(param_name, "%s:%s_livetime:param",
+-                        stats->feature_xmlname->str, IFOComboMap[icombo].name);
+-        ((long *)param_livetime.data)[0] = multistats[icombo]->livetime;
++                        stats->feature_xmlname->str, multistats[ifo]->ifos);
++        ((long *)param_livetime.data)[0] = multistats[ifo]->livetime;
+         ligoxml_write_Param(writer, &param_livetime, BAD_CAST "int_8s",
+                             BAD_CAST param_name->str);
+     }
+@@ -1501,15 +1495,15 @@ gboolean trigger_stats_xml_dump(TriggerStatsXML *stats,
+     free(param_nevent.data);
+     free(param_livetime.data);
+     free(param_hist_trials.data);
+-    for (icombo = ncombo - 1; icombo >= 0; icombo--) {
+-        freeArray(array_lgsnr_rate + icombo);
+-        freeArray(array_lgchisq_rate + icombo);
+-        freeArray(array_lgsnr_lgchisq_rate + icombo);
+-        freeArray(array_lgsnr_lgchisq_pdf + icombo);
+-        freeArray(array_rank_map + icombo);
+-        freeArray(array_rank_rate + icombo);
+-        freeArray(array_rank_pdf + icombo);
+-        freeArray(array_rank_fap + icombo);
++    for (int node = nnodes - 1; node >= 0; node--) {
++        freeArray(array_lgsnr_rate + node);
++        freeArray(array_lgchisq_rate + node);
++        freeArray(array_lgsnr_lgchisq_rate + node);
++        freeArray(array_lgsnr_lgchisq_pdf + node);
++        freeArray(array_rank_map + node);
++        freeArray(array_rank_rate + node);
++        freeArray(array_rank_pdf + node);
++        freeArray(array_rank_fap + node);
+     }
+     free(array_lgsnr_rate);
+     free(array_lgchisq_rate);
+diff --git a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.h b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.h
+index 4c5990d4..9eda6a4a 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.h
++++ b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.h
+@@ -1,5 +1,6 @@
+ /*
+- * Copyright (C) 2015 Qi Chu <qi.chu@uwa.edu.au>
++ * Copyright (C) 2015 Qi Chu <qi.chu@uwa.edu.au>,
++ *               2020 Tom Almeida <tom@tommoa.me>,
+  *
+  * Permission is hereby granted, free of charge, to any person obtaining a
+  * copy of this software and associated documentation files (the
+@@ -48,7 +49,7 @@ Bins2D *bins2D_create_long(double cmin_x,
+                            double cmax_y,
+                            int nbin_y);
+ 
+-TriggerStats **trigger_stats_create(int ncombo);
++TriggerStats **trigger_stats_create(int icombo);
+ 
+ int bins1D_get_idx(double val, Bins1D *bins);
+ 
+diff --git a/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c b/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
+index 154cbda1..c742a658 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
++++ b/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
+@@ -1,5 +1,6 @@
+ /*
+- * Copyright (C) 2015	Qi Chu	<qi.chu@uwa.edu.au>
++ * Copyright (C) 2015	Qi Chu	<qi.chu@uwa.edu.au>,
++ *               2020   Tom Almeida <tom@tommoa.me>,
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License as published by
+@@ -103,30 +104,27 @@ static gboolean cohfar_accumbackground_sink_event(GstPad *pad, GstEvent *event);
+ static void cohfar_accumbackground_dispose(GObject *object);
+ 
+ static void update_stats_icombo(PostcohInspiralTable *intable,
+-                                int icombo,
+-                                int ncombo,
+                                 TriggerStatsXML *stats) {
+-    int nifo, isingle, write_ifo_mapping[MAX_NIFO];
+-    // update the multi-IFO background at the last bin.
+-    if (icombo > -1) {
++    int nifo, ifo;
++    nifo = __builtin_popcount(stats->icombo + 1);
++
++    if (stats->icombo > -1) {
++        // update the multi-IFO background at the last bin.
+         trigger_stats_feature_rate_update(
+           (double)(intable->cohsnr), (double)intable->cmbchisq,
+-          stats->multistats[ncombo - 1]->feature,
+-          stats->multistats[ncombo - 1]);
++          stats->multistats[nifo]->feature, stats->multistats[nifo]);
+ 
+-        nifo = strlen(intable->ifos) / IFO_LEN;
+         /* add single detector stats */
+-        get_write_ifo_mapping(IFOComboMap[icombo].name, nifo,
+-                              write_ifo_mapping);
+-
+         // update single-IFO background according the single-IFO decomposition
+-        for (isingle = 0; isingle < nifo; isingle++) {
+-            int write_isingle = write_ifo_mapping[isingle];
+-            trigger_stats_feature_rate_update(
+-              (double)(*(&(intable->snglsnr_H) + write_isingle)),
+-              (double)(*(&(intable->chisq_H) + write_isingle)),
+-              stats->multistats[write_isingle]->feature,
+-              stats->multistats[write_isingle]);
++        int index;
++        for (ifo = 0, index = 0; ifo < MAX_NIFO; ifo++) {
++            if ((stats->icombo + 1) & (1 << ifo)) {
++                trigger_stats_feature_rate_update(
++                  (double)((&intable->snglsnr_H)[ifo]),
++                  (double)((&intable->chisq_H)[ifo]),
++                  stats->multistats[index]->feature, stats->multistats[index]);
++                ++index;
++            }
+         }
+     }
+ }
+@@ -171,14 +169,14 @@ static GstFlowReturn cohfar_accumbackground_chain(GstPad *pad,
+     // TriggerStats **stats_prompt = element->stats_prompt;
+     // TriggerStatsPointerList *stats_list = element->stats_list;
+     // /* reset stats_prompt */
+-    // trigger_stats_reset(stats_prompt, element->ncombo);
++    // trigger_stats_reset(stats_prompt, element->nifo);
+ 
+     /*
+      * reset stats in the stats_list in order to input new background points
+      */
+     // int pos = stats_list->pos;
+     // TriggerStats **cur_stats_in_list = stats_list->plist[pos];
+-    // trigger_stats_reset(cur_stats_in_list, element->ncombo);
++    // trigger_stats_reset(cur_stats_in_list, element->nifo);
+ 
+     /*
+      * calculate number of output postcoh entries
+@@ -203,7 +201,7 @@ static GstFlowReturn cohfar_accumbackground_chain(GstPad *pad,
+ 
+     /* allocate extra space for prompt stats */
+     // int out_size = sizeof(PostcohInspiralTable) * outentries +
+-    // sizeof(TriggerStats) * ncombo;
++    // sizeof(TriggerStats) * (nifo + 1);
+     int out_size = sizeof(PostcohInspiralTable) * outentries;
+     result       = gst_pad_alloc_buffer(srcpad, 0, out_size, caps, &outbuf);
+     if (result != GST_FLOW_OK) {
+@@ -235,13 +233,13 @@ static GstFlowReturn cohfar_accumbackground_chain(GstPad *pad,
+         }
+         if (intable->is_background == FLAG_BACKGROUND) {
+             update_stats_icombo(
+-              intable, icombo, element->ncombo,
+-              bgstats); // update the last ncombo and single IFO stats
++              intable,
++              bgstats); // update the last combination and single IFO stats
+         } else if (intable->is_background
+                    == FLAG_FOREGROUND) { /* coherent trigger entry */
+             update_stats_icombo(
+-              intable, icombo, element->ncombo,
+-              zlstats); // update the last ncombo and single IFO stats
++              intable,
++              zlstats); // update the last combination and single IFO stats
+             memcpy(outtable, intable, sizeof(PostcohInspiralTable));
+             outtable++;
+         } else {
+@@ -252,22 +250,15 @@ static GstFlowReturn cohfar_accumbackground_chain(GstPad *pad,
+             //
+             // Note that this is inverted because icombo is sum(1 << index) - 1
+             if ((icombo + 1) & icombo) {
+-                nifo = strlen(intable->ifos) / IFO_LEN;
++                nifo = __builtin_popcount(icombo + 1);
+                 /* add single detector stats */
+                 get_write_ifo_mapping(IFOComboMap[icombo].name, nifo,
+                                       element->write_ifo_mapping);
+ 
+-                for (isingle = 0; isingle < nifo; isingle++) {
+-                    int write_isingle = element->write_ifo_mapping[isingle];
+-                    trigger_stats_livetime_inc(bgstats->multistats,
+-                                               write_isingle);
+-                    trigger_stats_livetime_inc(zlstats->multistats,
+-                                               write_isingle);
++                for (isingle = 0; isingle <= nifo; isingle++) {
++                    trigger_stats_livetime_inc(bgstats->multistats, isingle);
++                    trigger_stats_livetime_inc(zlstats->multistats, isingle);
+                 }
+-                trigger_stats_livetime_inc(bgstats->multistats,
+-                                           element->ncombo - 1);
+-                trigger_stats_livetime_inc(zlstats->multistats,
+-                                           element->ncombo - 1);
+             }
+             memcpy(outtable, intable, sizeof(PostcohInspiralTable));
+             outtable++;
+@@ -422,7 +413,7 @@ static void cohfar_accumbackground_set_property(GObject *object,
+     case PROP_IFOS:
+         element->ifos   = g_value_dup_string(value);
+         element->nifo   = strlen(element->ifos) / IFO_LEN;
+-        element->ncombo = get_ncombo(element->nifo);
++        element->icombo = get_icombo(element->ifos);
+         element->bgstats =
+           trigger_stats_xml_create(element->ifos, STATS_XML_TYPE_BACKGROUND);
+         element->zlstats =
+diff --git a/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.h b/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.h
+index c3480659..07cf0a5e 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.h
++++ b/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.h
+@@ -32,8 +32,8 @@
+ #include <glib.h>
+ #include <gst/base/gstbasetransform.h>
+ #include <gst/gst.h>
+-#include <postcohtable.h>
+ #include <libxml/xmlwriter.h>
++#include <postcohtable.h>
+ 
+ G_BEGIN_DECLS
+ #define COHFAR_ACCUMBACKGROUND_TYPE (cohfar_accumbackground_get_type())
+@@ -59,7 +59,7 @@ typedef struct {
+ 
+     char *ifos;
+     int nifo;
+-    int ncombo; // ifo combination
++    int icombo; // ifo combination
+     int write_ifo_mapping[MAX_NIFO];
+     TriggerStatsXML *bgstats;
+     TriggerStatsXML *zlstats;
+diff --git a/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.c b/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.c
+index ef5be930..8590bf2a 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.c
++++ b/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.c
+@@ -293,9 +293,9 @@ static GstFlowReturn cohfar_assignfar_transform_ip(GstBaseTransform *trans,
+                 fprintf(stderr, "icombo not found, cohfar_assignfar\n");
+                 exit(0);
+             }
+-            cur_stats = element->bgstats_1w->multistats[element->ncombo - 1];
++            cur_stats = element->bgstats_1w->multistats[element->nifo];
+             if (icombo > -1 && cur_stats->nevent > MIN_BACKGROUND_NEVENT) {
+-                update_trigger_fars(table, element->ncombo - 1, element);
++                update_trigger_fars(table, element->nifo, element);
+             }
+         }
+     }
+@@ -344,7 +344,7 @@ static void cohfar_assignfar_set_property(GObject *object,
+     case PROP_IFOS:
+         element->ifos   = g_value_dup_string(value);
+         element->nifo   = strlen(element->ifos) / IFO_LEN;
+-        element->ncombo = get_ncombo(element->nifo);
++        element->icombo = get_icombo(element->ifos);
+         element->bgstats_1w =
+           trigger_stats_xml_create(element->ifos, STATS_XML_TYPE_BACKGROUND);
+         element->bgstats_1d =
+diff --git a/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.h b/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.h
+index c3fb3223..0471da19 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.h
++++ b/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.h
+@@ -54,7 +54,7 @@ typedef struct {
+ 
+     char *ifos;
+     int nifo;
+-    int ncombo; // ifo combination
++    int icombo; // ifo combination
+     int hist_trials;
+     TriggerStatsXML *bgstats_2h;
+     TriggerStatsXML *bgstats_1d;
+diff --git a/gstlal-spiir/gst/cuda/cohfar/cohfar_calc_fap.c b/gstlal-spiir/gst/cuda/cohfar/cohfar_calc_fap.c
+index 8a3fc991..49dcb142 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/cohfar_calc_fap.c
++++ b/gstlal-spiir/gst/cuda/cohfar/cohfar_calc_fap.c
+@@ -1,5 +1,6 @@
+ /*
+- * Copyright (C) 2015 Qi Chu <qi.chu@uwa.edu.au>
++ * Copyright (C) 2015 Qi Chu <qi.chu@uwa.edu.au>,
++ *               2020 Tom Almeida <tom@tommoa.me>,
+  *
+  * Permission is hereby granted, free of charge, to any person obtaining a
+  * copy of this software and associated documentation files (the
+@@ -44,13 +45,21 @@ static void parse_opts(int argc,
+     *ptype                    = g_strdup("all");
+     *update_pdf               = 0;
+     int option_index          = 0;
+-    struct option long_opts[] = { { "input", required_argument, 0, 'i' },
+-                                  { "input-format", required_argument, 0, 'f' },
+-                                  { "output", required_argument, 0, 'o' },
+-                                  { "ifos", required_argument, 0, 'd' },
+-                                  { "type", required_argument, 0, 'u' },
+-                                  { "update-pdf", no_argument, 0, 'p' },
+-                                  { 0, 0, 0, 0 } };
++    struct option long_opts[] = {
++        // A comma separated list of files to use for input.
++        { "input", required_argument, 0, 'i' },
++        // The format of the input files. One of "data" or "stats".
++        { "input-format", required_argument, 0, 'f' },
++        // The name of the file to output.
++        { "output", required_argument, 0, 'o' },
++        // The IFOs to use.
++        { "ifos", required_argument, 0, 'd' },
++        // The type of stat. One of "background", "zerolag", "signal" or "all".
++        { "type", required_argument, 0, 'u' },
++        // Should we update the PDF?
++        { "update-pdf", no_argument, 0, 'p' },
++        { 0, 0, 0, 0 }
++    };
+     int opt;
+     while (
+       (opt = getopt_long(argc, argv, "i:f:o:d:u:p:", long_opts, &option_index))
+@@ -131,19 +140,18 @@ void cohfar_get_stats_from_file(gchar **in_fnames,
+                                 TriggerStatsXML *stats_out,
+                                 int *hist_trials) {
+     gchar **ifname;
+-    int icombo;
++    int ifo;
+     for (ifname = in_fnames; *ifname; ifname++) {
+ #ifdef __DEBUG__
+         printf("%s\n", *ifname);
+ #endif
+         trigger_stats_xml_from_xml(stats_in, hist_trials, *ifname);
+-        for (icombo = 0; icombo < stats_in->ncombo; icombo++) {
+-            trigger_stats_feature_rate_add(
+-              stats_out->multistats[icombo]->feature,
+-              stats_in->multistats[icombo]->feature,
+-              stats_out->multistats[icombo]);
++        for (ifo = 0; ifo <= __builtin_popcount(stats_in->icombo + 1); ifo++) {
++            trigger_stats_feature_rate_add(stats_out->multistats[ifo]->feature,
++                                           stats_in->multistats[ifo]->feature,
++                                           stats_out->multistats[ifo]);
+             trigger_stats_livetime_add(stats_out->multistats,
+-                                       stats_in->multistats, icombo);
++                                       stats_in->multistats, ifo);
+         }
+     }
+ }
+@@ -157,7 +165,7 @@ static int get_type(gchar **ptype) {
+ 
+ static int process_stats_full(
+   gchar **in_fnames, int nifo, gchar **pifos, gchar **pout, int *update_pdf) {
+-    int icombo, ncombo = get_ncombo(nifo), hist_trials;
++    int ifo, hist_trials;
+     TriggerStatsXML *zlstats_in =
+       trigger_stats_xml_create(*pifos, STATS_XML_TYPE_ZEROLAG);
+     TriggerStatsXML *zlstats_out =
+@@ -180,24 +188,21 @@ static int process_stats_full(
+     cohfar_get_stats_from_file(in_fnames, bgstats_in, bgstats_out,
+                                &hist_trials);
+     if (*update_pdf == 1) {
+-        for (icombo = 0; icombo < ncombo; icombo++) {
++        for (ifo = 0; ifo < nifo; ifo++) {
+             trigger_stats_feature_rate_to_pdf(
+-              sgstats_out->multistats[icombo]->feature);
+-            trigger_stats_feature_to_rank(
+-              sgstats_out->multistats[icombo]->feature,
+-              sgstats_out->multistats[icombo]->rank);
++              sgstats_out->multistats[ifo]->feature);
++            trigger_stats_feature_to_rank(sgstats_out->multistats[ifo]->feature,
++                                          sgstats_out->multistats[ifo]->rank);
+ 
+             trigger_stats_feature_rate_to_pdf(
+-              zlstats_out->multistats[icombo]->feature);
+-            trigger_stats_feature_to_rank(
+-              zlstats_out->multistats[icombo]->feature,
+-              zlstats_out->multistats[icombo]->rank);
++              zlstats_out->multistats[ifo]->feature);
++            trigger_stats_feature_to_rank(zlstats_out->multistats[ifo]->feature,
++                                          zlstats_out->multistats[ifo]->rank);
+ 
+             trigger_stats_feature_rate_to_pdf(
+-              bgstats_out->multistats[icombo]->feature);
+-            trigger_stats_feature_to_rank(
+-              bgstats_out->multistats[icombo]->feature,
+-              bgstats_out->multistats[icombo]->rank);
++              bgstats_out->multistats[ifo]->feature);
++            trigger_stats_feature_to_rank(bgstats_out->multistats[ifo]->feature,
++                                          bgstats_out->multistats[ifo]->rank);
+         }
+     }
+ 
+@@ -234,18 +239,17 @@ static int process_stats_single(gchar **in_fnames,
+                                 gchar **pout,
+                                 int type,
+                                 int *update_pdf) {
+-    int icombo, ncombo = get_ncombo(nifo), hist_trials;
++    int ifo, hist_trials;
+ 
+     TriggerStatsXML *stats_in  = trigger_stats_xml_create(*pifos, type);
+     TriggerStatsXML *stats_out = trigger_stats_xml_create(*pifos, type);
+     cohfar_get_stats_from_file(in_fnames, stats_in, stats_out, &hist_trials);
+     if (*update_pdf == 1) {
+-        for (icombo = 0; icombo < ncombo; icombo++) {
++        for (ifo = 0; ifo < nifo; ifo++) {
+             trigger_stats_feature_rate_to_pdf(
+-              stats_out->multistats[icombo]->feature);
+-            trigger_stats_feature_to_rank(
+-              stats_out->multistats[icombo]->feature,
+-              stats_out->multistats[icombo]->rank);
++              stats_out->multistats[ifo]->feature);
++            trigger_stats_feature_to_rank(stats_out->multistats[ifo]->feature,
++                                          stats_out->multistats[ifo]->rank);
+         }
+     }
+     xmlTextWriterPtr stats_writer = NULL;
+@@ -288,24 +292,18 @@ int main(int argc, char *argv[]) {
+           trigger_stats_xml_create(*pifos, STATS_XML_TYPE_BACKGROUND);
+         TriggerStatsXML *bgstats_out =
+           trigger_stats_xml_create(*pifos, STATS_XML_TYPE_BACKGROUND);
+-        int ncombo = get_ncombo(nifo);
+         // FIXME: hardcoded to only update the last stats
+         trigger_stats_feature_rate_update_all(
+-          data_dim1, data_dim2, bgstats_out->multistats[ncombo - 1]->feature,
+-          bgstats_out->multistats[ncombo - 1]);
++          data_dim1, data_dim2, bgstats_out->multistats[nifo]->feature,
++          bgstats_out->multistats[nifo]);
+         trigger_stats_feature_rate_to_pdf(
+-          bgstats_out->multistats[ncombo - 1]->feature);
+-        trigger_stats_feature_to_rank(
+-          bgstats_out->multistats[ncombo - 1]->feature,
+-          bgstats_out->multistats[ncombo - 1]->rank);
++          bgstats_out->multistats[nifo]->feature);
++        trigger_stats_feature_to_rank(bgstats_out->multistats[nifo]->feature,
++                                      bgstats_out->multistats[nifo]->rank);
+         if (data_dim1) {
+             free(data_dim1);
+             free(data_dim2);
+         }
+-
+-        // trigger_stats_pdf_from_data(data_dim1, data_dim2,
+-        // stats_out[ncombo-1]->rate->lgsnr_bins,
+-        // stats_out[ncombo-1]->rate->lgchisq_bins, stats_out[ncombo-1]->pdf);
+     } else if (g_strcmp0(*pfmt, "stats") == 0) {
+         if (type == STATS_XML_TYPE_ALL) {
+             rc = process_stats_full(in_fnames, nifo, pifos, pout, update_pdf);
+-- 
+GitLab
+

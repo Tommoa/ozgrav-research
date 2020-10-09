@@ -1,0 +1,2872 @@
+From 8ff7b39c3d8d3db77006e3690a04631de69df752 Mon Sep 17 00:00:00 2001
+From: Tom Almeida <tommoa256@gmail.com>
+Date: Sun, 6 Sep 2020 12:15:59 +0800
+Subject: [PATCH] postcohtable: Remove detector names from table
+
+This change removes detector names from the various data structures that
+are used throughout the pipeline and ensures that all pointers into the
+data structures have their offsets based upon the number of
+interferometers.
+
+Previously, adding support for an additional interferometer to the
+pipeline would involve modifying all of the below files, and would often
+require extensive testing to ensure that the massive number of changes
+that would need to be done would be correct.
+
+With these changes, when adding interferometers, the only file that
+needs to be changed is `gstlal-spiir/include/pipe_macro.h`, with the
+modification of `MAX_NIFO`, `IFOMap` and `IFOComboMap`. By changing
+these variables, the next compilation of the pipeline will automatically
+support the new interferometer.
+
+-- Tom Almeida
+---
+ .../gst/cuda/cohfar/background_stats_utils.c  |   2 +-
+ .../gst/cuda/cohfar/background_stats_utils.h  |  19 +-
+ .../gst/cuda/cohfar/cohfar_accumbackground.c  |   4 +-
+ .../gst/cuda/cohfar/cohfar_assignfar.c        |  86 +--
+ gstlal-spiir/gst/cuda/cohfar/ssvkernel.c      |  16 +-
+ gstlal-spiir/gst/cuda/cohfar/ssvkernel.h      |   2 +-
+ .../gst/cuda/cohfar/test_knn_pipeline.c       |   4 +-
+ gstlal-spiir/gst/cuda/cuda_plugin.c           |   2 +-
+ gstlal-spiir/gst/cuda/postcoh/postcoh.c       | 107 ++-
+ gstlal-spiir/gst/cuda/postcoh/postcoh.h       |  68 +-
+ .../gst/cuda/postcoh/postcoh_kernel.cu        | 647 +++---------------
+ gstlal-spiir/gst/cuda/postcoh/postcoh_utils.c | 207 +++---
+ gstlal-spiir/gst/cuda/postcoh/postcoh_utils.h |   2 +
+ .../gst/cuda/postcoh/postcohtable_utils.c     | 241 +++----
+ gstlal-spiir/gst/cuda/spiir/spiir_kernel.cu   |   4 +-
+ gstlal-spiir/include/pipe_macro.h             |  16 +-
+ gstlal-spiir/include/postcohtable.h           |  36 +-
+ .../python/pipemodules/postcoh_finalsink.py   |  35 +-
+ .../pipemodules/postcohtable/Makefile.am      |   2 +-
+ .../pipemodules/postcohtable/_postcohtable.c  | 389 ++++++++---
+ .../postcohtable/postcoh_table_def.py         | 132 ++--
+ .../pipemodules/postcohtable/postcohtable.py  |   4 +-
+ 22 files changed, 860 insertions(+), 1165 deletions(-)
+
+diff --git a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
+index 449cf376..4c6f049d 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
++++ b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.c
+@@ -52,7 +52,7 @@ int scan_trigger_ifos(int icombo, PostcohInspiralTable *trigger) {
+         if (icombo & (1 << i)) {
+             // [THA]: This is a check that the data from this IFO is actually
+             // valid. If it's not valid, the number will be very *very* small
+-            if (*(&trigger->snglsnr_H + i) > EPSILON) {
++            if (trigger->snglsnr[i] > EPSILON) {
+                 strncpy(final_ifos + IFO_LEN * nifo, IFOMap[i].name,
+                         one_ifo_size);
+                 nifo++;
+diff --git a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.h b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.h
+index 9eda6a4a..abe7fc7f 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.h
++++ b/gstlal-spiir/gst/cuda/cohfar/background_stats_utils.h
+@@ -32,6 +32,7 @@
+ #include <LIGOLwHeader.h>
+ #include <cohfar/background_stats.h>
+ #include <glib.h>
++#include <postcohtable.h>
+ 
+ Bins1D *bins1D_create_long(double cmin, double cmax, int nbin);
+ 
+@@ -53,10 +54,20 @@ TriggerStats **trigger_stats_create(int icombo);
+ 
+ int bins1D_get_idx(double val, Bins1D *bins);
+ 
+-void trigger_stats_feature_rates_update(double snr,
+-                                        double chisq,
+-                                        FeatureStats *feature,
+-                                        TriggerStats *cur_stats);
++void trigger_stats_feature_rate_update(double snr,
++                                       double chisq,
++                                       FeatureStats *feature,
++                                       TriggerStats *cur_stats);
++
++double trigger_stats_get_val_from_map(double snr, double chisq, Bins2D *bins);
++
++int scan_trigger_ifos(int icombo, PostcohInspiralTable *trigger);
++
++void trigger_stats_livetime_inc(TriggerStats **stats, const int index);
++
++void trigger_stats_xml_reset(TriggerStatsXML *stats);
++
++void signal_stats_init(TriggerStatsXML *sgstats, int source_type);
+ 
+ void trigger_stats_feature_rates_add(FeatureStats *feature1,
+                                      FeatureStats *feature2,
+diff --git a/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c b/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
+index c742a658..6f8f3124 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
++++ b/gstlal-spiir/gst/cuda/cohfar/cohfar_accumbackground.c
+@@ -120,8 +120,8 @@ static void update_stats_icombo(PostcohInspiralTable *intable,
+         for (ifo = 0, index = 0; ifo < MAX_NIFO; ifo++) {
+             if ((stats->icombo + 1) & (1 << ifo)) {
+                 trigger_stats_feature_rate_update(
+-                  (double)((&intable->snglsnr_H)[ifo]),
+-                  (double)((&intable->chisq_H)[ifo]),
++                  (double)(intable->snglsnr[ifo]),
++                  (double)(intable->chisq[ifo]),
+                   stats->multistats[index]->feature, stats->multistats[index]);
+                 ++index;
+             }
+diff --git a/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.c b/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.c
+index 8590bf2a..cdb5648d 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.c
++++ b/gstlal-spiir/gst/cuda/cohfar/cohfar_assignfar.c
+@@ -133,72 +133,30 @@ static void update_trigger_fars(PostcohInspiralTable *table,
+                                              cur_stats->rank->rank_map);
+     table->rank = MAX(MAX(rank_1w, rank_1d), rank_2h);
+ 
+-    /* FIXME: currently hardcoded for single detectors FAR */
+-    cur_stats = element->bgstats_1w->multistats[0];
+-    far       = BOUND(FLT_MIN, gen_fap_from_feature((double)table->snglsnr_H,
+-                                              (double)table->chisq_H, cur_stats)
+-                           * cur_stats->nevent
+-                           / (cur_stats->livetime * hist_trials));
+-    table->far_h_1w = far;
+-
+-    cur_stats = element->bgstats_1w->multistats[1];
+-    far       = BOUND(FLT_MIN, gen_fap_from_feature((double)table->snglsnr_L,
+-                                              (double)table->chisq_L, cur_stats)
+-                           * cur_stats->nevent
+-                           / (cur_stats->livetime * hist_trials));
+-    table->far_l_1w = far;
+-
+-    cur_stats = element->bgstats_1w->multistats[2];
+-    far       = BOUND(FLT_MIN, gen_fap_from_feature((double)table->snglsnr_V,
+-                                              (double)table->chisq_V, cur_stats)
+-                           * cur_stats->nevent
+-                           / (cur_stats->livetime * hist_trials));
+-    table->far_v_1w = far;
+-
+-    cur_stats = element->bgstats_1d->multistats[0];
+-    far       = BOUND(FLT_MIN, gen_fap_from_feature((double)table->snglsnr_H,
+-                                              (double)table->chisq_H, cur_stats)
+-                           * cur_stats->nevent
+-                           / (cur_stats->livetime * hist_trials));
+-    table->far_h_1d = far;
+-
+-    cur_stats = element->bgstats_1d->multistats[1];
+-    far       = BOUND(FLT_MIN, gen_fap_from_feature((double)table->snglsnr_L,
+-                                              (double)table->chisq_L, cur_stats)
+-                           * cur_stats->nevent
+-                           / (cur_stats->livetime * hist_trials));
+-    table->far_l_1d = far;
+-
+-    cur_stats = element->bgstats_1d->multistats[2];
+-    far       = BOUND(FLT_MIN, gen_fap_from_feature((double)table->snglsnr_V,
+-                                              (double)table->chisq_V, cur_stats)
+-                           * cur_stats->nevent
+-                           / (cur_stats->livetime * hist_trials));
+-    table->far_v_1d = far;
+-
+-    cur_stats = element->bgstats_2h->multistats[0];
+-    if (cur_stats->livetime > 0) {
+-        far = BOUND(
+-          FLT_MIN, gen_fap_from_feature((double)table->snglsnr_H,
+-                                        (double)table->chisq_H, cur_stats)
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        cur_stats = element->bgstats_1w->multistats[i];
++        far       = BOUND(
++          FLT_MIN, gen_fap_from_feature((double)table->snglsnr[i],
++                                        (double)table->chisq[i], cur_stats)
+                      * cur_stats->nevent / (cur_stats->livetime * hist_trials));
+-        table->far_h_2h = far;
+-    }
+-    cur_stats = element->bgstats_2h->multistats[1];
+-    if (cur_stats->livetime > 0) {
+-        far = BOUND(
+-          FLT_MIN, gen_fap_from_feature((double)table->snglsnr_L,
+-                                        (double)table->chisq_L, cur_stats)
+-                     * cur_stats->nevent / (cur_stats->livetime * hist_trials));
+-        table->far_l_2h = far;
+-    }
+-    cur_stats = element->bgstats_2h->multistats[2];
+-    if (cur_stats->livetime > 0) {
+-        far = BOUND(
+-          FLT_MIN, gen_fap_from_feature((double)table->snglsnr_V,
+-                                        (double)table->chisq_V, cur_stats)
++        table->far_1w_sngl[i] = far;
++
++        cur_stats = element->bgstats_1d->multistats[i];
++        far       = BOUND(
++          FLT_MIN, gen_fap_from_feature((double)table->snglsnr[i],
++                                        (double)table->chisq[i], cur_stats)
+                      * cur_stats->nevent / (cur_stats->livetime * hist_trials));
+-        table->far_v_2h = far;
++        table->far_1d_sngl[i] = far;
++
++        cur_stats = element->bgstats_2h->multistats[i];
++        if (cur_stats->livetime > 0) {
++            far                   = BOUND(FLT_MIN,
++                        gen_fap_from_feature((double)table->snglsnr[i],
++                                             (double)table->chisq[i], cur_stats)
++                          * cur_stats->nevent
++                          / (cur_stats->livetime * hist_trials));
++            table->far_2h_sngl[i] = far;
++        }
+     }
+ }
+ 
+diff --git a/gstlal-spiir/gst/cuda/cohfar/ssvkernel.c b/gstlal-spiir/gst/cuda/cohfar/ssvkernel.c
+index e9c3a6a0..1b53804f 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/ssvkernel.c
++++ b/gstlal-spiir/gst/cuda/cohfar/ssvkernel.c
+@@ -39,7 +39,7 @@
+ // y_hist_result: one-dimensional histogram
+ // result: a L*L matrix. result(i,j) =
+ // count(Bin_i)/h(x_j)*K[x-point(Bin_i)/h(x_j)] (each variable's meaning: see
+-//document of 'Shimazaki’s method' part.).
++// document of 'Shimazaki’s method' part.).
+ //
+ 
+ // int main()
+@@ -282,7 +282,8 @@ double CostFunction(gsl_vector *y_hist,
+     //	for (i = 0; i < y_hist->size; i++) {
+     //		if (gsl_vector_get(y_hist, i) != 0) {
+     //			gsl_vector_set(y_hist_nz, idx, gsl_vector_get(y_hist,
+-    //i)); 			gsl_vector_set(t_nz, idx, gsl_vector_get(t, i)); 			idx++;
++    // i)); 			gsl_vector_set(t_nz, idx, gsl_vector_get(t, i));
++    // idx++;
+     //		}
+     //	}
+     //
+@@ -905,8 +906,8 @@ void ssvkernel(gsl_vector *x,
+     //		gsl_vector * xb = gsl_vector_alloc(Nb);
+     //		for (j = 0; j < Nb; j++) {
+     //			gsl_vector_set(xb, j,
+-    //					gsl_vector_get(x_ab, floor(gsl_ran_flat(r, 0,
+-    //N))));
++    //					gsl_vector_get(x_ab, floor(gsl_ran_flat(r,
++    //0, N))));
+     //		}
+     //
+     //		gsl_vector_histc(xb, t_dt2, y_histb);
+@@ -923,7 +924,8 @@ void ssvkernel(gsl_vector *x,
+     //		for (j = 0; j < tin->size; j++) {
+     //			gsl_matrix_set(yb, i, j,
+     //					gsl_interp_eval(linear, t->data,
+-    //yb_buf->data, 							gsl_vector_get(tin, j), acc));
++    // yb_buf->data, 							gsl_vector_get(tin, j),
++    // acc));
+     //		}
+     //		gsl_vector_free(xb);
+     //	}
+@@ -934,8 +936,8 @@ void ssvkernel(gsl_vector *x,
+     //		gsl_sort_vector(yb_col);
+     //		gsl_vector_set(lower_bound, i,
+     //				gsl_vector_get(yb_col, floor((1 - confidence) *
+-    //nbs))); 		gsl_vector_set(upper_bound, i, 				gsl_vector_get(yb_col,
+-    //floor((confidence) * nbs)));
++    // nbs))); 		gsl_vector_set(upper_bound, i,
++    // gsl_vector_get(yb_col, floor((confidence) * nbs)));
+     //	}
+     //	gsl_interp_init(linear, t->data, yv->data, t->size);
+     //	for (i = 0; i < tin->size; i++) {
+diff --git a/gstlal-spiir/gst/cuda/cohfar/ssvkernel.h b/gstlal-spiir/gst/cuda/cohfar/ssvkernel.h
+index b1beda94..71d0ae82 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/ssvkernel.h
++++ b/gstlal-spiir/gst/cuda/cohfar/ssvkernel.h
+@@ -19,7 +19,7 @@
+ // y_hist_result: one-dimensional histogram
+ // result: a L*L matrix. result(i,j) =
+ // count(Bin_i)/h(x_j)*K[x-point(Bin_i)/h(x_j)] (each variable's meaning: see
+-//document of 'Shimazaki’s method' part.).
++// document of 'Shimazaki’s method' part.).
+ //
+ 
+ // int main()
+diff --git a/gstlal-spiir/gst/cuda/cohfar/test_knn_pipeline.c b/gstlal-spiir/gst/cuda/cohfar/test_knn_pipeline.c
+index d42e1ee5..2432b025 100644
+--- a/gstlal-spiir/gst/cuda/cohfar/test_knn_pipeline.c
++++ b/gstlal-spiir/gst/cuda/cohfar/test_knn_pipeline.c
+@@ -144,7 +144,7 @@ void getTemp(int *tempPtr, float *histgt0Ptr) {
+     }
+     //	tempPtr = {2 5 7 9 11 15 16 18 20 22 29 31 35}
+     //	histgt0Ptr = {0.0714 0.0714 0.0714 0.0714 0.0714 0.0714 0.0714 0.0714
+-    //0.0714 0.0714 0.0714 0.0714 0.1429 }
++    // 0.0714 0.0714 0.0714 0.0714 0.1429 }
+ }
+ 
+ void getHistaxis(int *tempPtr, int **histaxisPtr) {
+@@ -217,7 +217,7 @@ void getHwidth(float *kthDistPtr, float GlobalHband, float *hwidthPtr) {
+     //	For K=2
+     //	kthDistPtr =
+     //{1.4142 1.0000 1.4142 1.0000 1.0000 1.0000 1.0000 2.0000 1.4142 1.0000 1.0000
+-    //2.2361 1.0000}
++    // 2.2361 1.0000}
+ }
+ 
+ void getPDF(float *hwidthPtr, float *histgt0Ptr, int **histaxisPtr) {
+diff --git a/gstlal-spiir/gst/cuda/cuda_plugin.c b/gstlal-spiir/gst/cuda/cuda_plugin.c
+index 6b19b0b1..bb3cc412 100644
+--- a/gstlal-spiir/gst/cuda/cuda_plugin.c
++++ b/gstlal-spiir/gst/cuda/cuda_plugin.c
+@@ -61,7 +61,7 @@ static gboolean plugin_init(GstPlugin *plugin) {
+         { "cuda_iirbank", CUDA_IIRBANK_TYPE },
+         //		{"cuda_audioresample", CUDA_AUDIO_RESAMPLE_TYPE},
+         //		{"gstlal_multidownsample",
+-        //GSTLAL_MULTI_DOWNSAMPLE_TYPE},
++        // GSTLAL_MULTI_DOWNSAMPLE_TYPE},
+         { "cuda_multiratespiir", CUDA_TYPE_MULTIRATESPIIR },
+         { "cuda_postcoh", CUDA_TYPE_POSTCOH },
+         { "postcoh_filesink", POSTCOH_TYPE_FILESINK },
+diff --git a/gstlal-spiir/gst/cuda/postcoh/postcoh.c b/gstlal-spiir/gst/cuda/postcoh/postcoh.c
+index 85f071ff..d51bff60 100644
+--- a/gstlal-spiir/gst/cuda/postcoh/postcoh.c
++++ b/gstlal-spiir/gst/cuda/postcoh/postcoh.c
+@@ -73,8 +73,8 @@ static gboolean need_flag_gap(GstPostcohCollectData *data,
+     for (i = 0; i < flag_segments->len; i++) {
+         this_segment = &((FlagSegment *)flag_segments->data)[i];
+         /*		| start				| stop
+-         *									| this_start
+-         *(1) | s | e (2)
++         *									|
++         *this_start (1) | s | e (2)
+          * | s							| e
+          * | s		| e
+          *            |s | e
+@@ -1144,10 +1144,11 @@ static int cuda_postcoh_select_background(PeakList *pklist,
+         for (itrial = 1; itrial <= hist_trials; itrial++) {
+             background_cur = (itrial - 1) * max_npeak + peak_cur;
+             // FIXME: consider a different threshold for 3-detector
+-            //			if (sqrt(pklist->cohsnr_bg[background_cur]) > cohsnr_thresh
++            //			if (sqrt(pklist->cohsnr_bg[background_cur]) >
++            // cohsnr_thresh
+             //* pklist->snglsnr_H[iifo*max_npeak + peak_cur])
+             if (sqrt(pklist->cohsnr_bg[background_cur])
+-                > 1.414 + pklist->snglsnr_H[write_ifo * max_npeak + peak_cur]) {
++                > 1.414 + pklist->snglsnr[write_ifo][peak_cur]) {
+                 left_backgrounds++;
+                 GST_LOG("mark back,%d ipeak, %d itrial", ipeak, itrial);
+             } else
+@@ -1207,9 +1208,7 @@ static int cuda_postcoh_select_foreground(PostcohState *state,
+             peak_cur = peak_pos[ipeak];
+             // FIXME: consider a different threshold for 3-detector
+             if (sqrt(pklist->cohsnr[peak_cur])
+-                > 1.414
+-                    + pklist->snglsnr_H[write_ifo * (state->max_npeak)
+-                                        + peak_cur]) {
++                > 1.414 + pklist->snglsnr[write_ifo][peak_cur]) {
+                 cluster_peak_pos[final_peaks++] = peak_cur;
+             } else
+                 bubbled_peak_pos[bubbled_peaks++] = peak_cur;
+@@ -1290,33 +1289,22 @@ static int cuda_postcoh_write_table_to_buf(CudaPostcoh *postcoh,
+             len_cur = pklist->len_idx[peak_cur];
+             XLALGPSAdd(&(end_time), (double)len_cur / exe_len);
+             output->end_time = end_time;
+-            XLALGPSAdd(&(end_time),
+-                       (double)pklist->ntoff_H[peak_cur] / exe_len);
+-            output->end_time_H = end_time;
+-            end_time           = output->end_time;
+-            XLALGPSAdd(&(end_time),
+-                       (double)pklist->ntoff_L[peak_cur] / exe_len);
+-            output->end_time_L = end_time;
+-            end_time           = output->end_time;
+-            XLALGPSAdd(&(end_time),
+-                       (double)pklist->ntoff_V[peak_cur] / exe_len);
+-            output->end_time_V = end_time;
+-            output->snglsnr_H  = pklist->snglsnr_H[peak_cur];
+-            output->snglsnr_L  = pklist->snglsnr_L[peak_cur];
+-            output->snglsnr_V  = pklist->snglsnr_V[peak_cur];
+-            output->coaphase_H = pklist->coaphase_H[peak_cur];
+-            output->coaphase_L = pklist->coaphase_L[peak_cur];
+-            output->coaphase_V = pklist->coaphase_V[peak_cur];
+-            output->chisq_H    = pklist->chisq_H[peak_cur];
+-            output->chisq_L    = pklist->chisq_L[peak_cur];
+-            output->chisq_V    = pklist->chisq_V[peak_cur];
++            for (int i = 0; i < MAX_NIFO; ++i) {
++                XLALGPSAdd(&(end_time),
++                           (double)pklist->ntoff[i][peak_cur] / exe_len);
++                output->end_time_sngl[i] = end_time;
++                end_time                 = output->end_time;
++
++                output->snglsnr[i]  = pklist->snglsnr[i][peak_cur];
++                output->coaphase[i] = pklist->coaphase[i][peak_cur];
++                output->chisq[i]    = pklist->chisq[i][peak_cur];
++            }
+ 
+             for (jifo = 0; jifo < nifo; jifo++) {
+                 int write_ifo = state->write_ifo_mapping[jifo];
+-                *(&output->deff_H + write_ifo) =
++                output->deff[write_ifo] =
+                   sqrt(state->sigmasq[jifo][cur_tmplt_idx])
+-                  / *(pklist->snglsnr_H + write_ifo * state->max_npeak
+-                      + peak_cur); // in MPC
++                  / pklist->snglsnr[write_ifo][peak_cur]; // in MPC
+             }
+             output->is_background = FLAG_FOREGROUND;
+             output->livetime      = livetime;
+@@ -1384,20 +1372,20 @@ static int cuda_postcoh_write_table_to_buf(CudaPostcoh *postcoh,
+                 output->skymap_fname[0] = '\0';
+             output->rank = 0;
+ 
+-            GST_LOG_OBJECT(postcoh,
+-                           "end_time_L %d, ipeak %d, peak_cur %d, len_cur %d, "
+-                           "tmplt_idx %d, pix_idx %d \t,"
+-                           "snglsnr_L %f, snglsnr_H %f, snglsnr_V %f,"
+-                           "coaphase_L %f, coaphase_H %f, coa_phase_V %f,"
+-                           "chisq_L %f, chisq_H %f, chisq_V %f,"
+-                           "cohsnr %f, nullsnr %f, cmbchisq %f\n",
+-                           output->end_time_L.gpsSeconds, ipeak, peak_cur,
+-                           len_cur, output->tmplt_idx, output->pix_idx,
+-                           output->snglsnr_L, output->snglsnr_H,
+-                           output->snglsnr_V, output->coaphase_L,
+-                           output->coaphase_H, output->coaphase_V,
+-                           output->chisq_L, output->chisq_H, output->chisq_V,
+-                           output->cohsnr, output->nullsnr, output->cmbchisq);
++            GST_LOG_OBJECT(
++              postcoh,
++              "end_time_sngl_0 %d, ipeak %d, peak_cur %d, len_cur %d, "
++              "tmplt_idx %d, pix_idx %d \t,"
++              "snglsnr_0 %f, snglsnr_1 %f, snglsnr_2 %f,"
++              "coaphase_0 %f, coaphase_1 %f, coa_phase_2 %f,"
++              "chisq_0 %f, chisq_1 %f, chisq_2 %f,"
++              "cohsnr %f, nullsnr %f, cmbchisq %f\n",
++              output->end_time_sngl[0].gpsSeconds, ipeak, peak_cur, len_cur,
++              output->tmplt_idx, output->pix_idx, output->snglsnr[0],
++              output->snglsnr[1], output->snglsnr[2], output->coaphase[0],
++              output->coaphase[1], output->coaphase[2], output->chisq[0],
++              output->chisq[1], output->chisq[2], output->cohsnr,
++              output->nullsnr, output->cmbchisq);
+ 
+             XLALINT8NSToGPS(&output->epoch, ts);
+             output->deltaT = 1. / postcoh->rate;
+@@ -1424,15 +1412,12 @@ static int cuda_postcoh_write_table_to_buf(CudaPostcoh *postcoh,
+                             state->all_ifos + IFO_LEN * iifo, one_ifo_size);
+                     output->pivotal_ifo[IFO_LEN] = '\0';
+                     output->tmplt_idx            = pklist->tmplt_idx[peak_cur];
+-                    output->snglsnr_H  = pklist->snglsnr_bg_H[peak_cur_bg];
+-                    output->snglsnr_L  = pklist->snglsnr_bg_L[peak_cur_bg];
+-                    output->snglsnr_V  = pklist->snglsnr_bg_V[peak_cur_bg];
+-                    output->coaphase_H = pklist->coaphase_bg_H[peak_cur_bg];
+-                    output->coaphase_L = pklist->coaphase_bg_L[peak_cur_bg];
+-                    output->coaphase_V = pklist->coaphase_bg_V[peak_cur_bg];
+-                    output->chisq_H    = pklist->chisq_bg_H[peak_cur_bg];
+-                    output->chisq_L    = pklist->chisq_bg_L[peak_cur_bg];
+-                    output->chisq_V    = pklist->chisq_bg_V[peak_cur_bg];
++                    for (int i = 0; i < MAX_NIFO; ++i) {
++                        output->snglsnr[i] = pklist->snglsnr_bg[i][peak_cur_bg];
++                        output->coaphase[i] =
++                          pklist->coaphase_bg[i][peak_cur_bg];
++                        output->chisq[i] = pklist->chisq_bg[i][peak_cur_bg];
++                    }
+ 
+                     // output->pix_idx = pklist->pix_idx[itrial*max_npeak +
+                     // peak_cur];
+@@ -1448,16 +1433,16 @@ static int cuda_postcoh_write_table_to_buf(CudaPostcoh *postcoh,
+                       postcoh,
+                       "ipeak %d, itrial %d, len_cur %d, tmplt_idx %d, pix_idx "
+                       "%d,"
+-                      "snglsnr_L %f, snglsnr_H %f, snglsnr_V %f,"
+-                      "coaphase_L %f, coaphase_H %f, coa_phase_V %f,"
+-                      "chisq_L %f, chisq_H %f, chisq_V %f,"
++                      "snglsnr[0] %f, snglsnr[1] %f, snglsnr[2] %f,"
++                      "coaphase[0] %f, coaphase[1] %f, coa_phase[2] %f,"
++                      "chisq[0] %f, chisq[1] %f, chisq[2] %f,"
+                       "cohsnr %f, nullsnr %f, cmbchisq %f\n",
+                       ipeak, itrial, len_cur, output->tmplt_idx,
+-                      output->pix_idx, output->snglsnr_L, output->snglsnr_H,
+-                      output->snglsnr_V, output->coaphase_L, output->coaphase_H,
+-                      output->coaphase_V, output->chisq_L, output->chisq_H,
+-                      output->chisq_V, output->cohsnr, output->nullsnr,
+-                      output->cmbchisq);
++                      output->pix_idx, output->snglsnr[0], output->snglsnr[2],
++                      output->snglsnr[2], output->coaphase[0],
++                      output->coaphase[1], output->coaphase[2],
++                      output->chisq[0], output->chisq[1], output->chisq[2],
++                      output->cohsnr, output->nullsnr, output->cmbchisq);
+ 
+                     /* do not dump snr for background */
+                     XLALINT8NSToGPS(&output->epoch, ts);
+diff --git a/gstlal-spiir/gst/cuda/postcoh/postcoh.h b/gstlal-spiir/gst/cuda/postcoh/postcoh.h
+index 0845168e..32d58dbf 100644
+--- a/gstlal-spiir/gst/cuda/postcoh/postcoh.h
++++ b/gstlal-spiir/gst/cuda/postcoh/postcoh.h
+@@ -88,29 +88,15 @@ typedef struct _PeakList {
+     int *tmplt_idx;
+     int *pix_idx;
+     int *pix_idx_bg; // background Ntoff needs this, do not remove
+-    int *ntoff_H;
+-    int *ntoff_L;
+-    int *ntoff_V;
+-
+-    float *snglsnr_H;
+-    float *snglsnr_L;
+-    float *snglsnr_V;
+-    float *coaphase_H;
+-    float *coaphase_L;
+-    float *coaphase_V;
+-    float *chisq_H;
+-    float *chisq_L;
+-    float *chisq_V;
+-
+-    float *snglsnr_bg_H;
+-    float *snglsnr_bg_L;
+-    float *snglsnr_bg_V;
+-    float *coaphase_bg_H;
+-    float *coaphase_bg_L;
+-    float *coaphase_bg_V;
+-    float *chisq_bg_H;
+-    float *chisq_bg_L;
+-    float *chisq_bg_V;
++    int *ntoff[MAX_NIFO];
++
++    float *snglsnr[MAX_NIFO];
++    float *coaphase[MAX_NIFO];
++    float *chisq[MAX_NIFO];
++
++    float *snglsnr_bg[MAX_NIFO];
++    float *coaphase_bg[MAX_NIFO];
++    float *chisq_bg[MAX_NIFO];
+ 
+     float *cohsnr;
+     float *nullsnr;
+@@ -124,35 +110,25 @@ typedef struct _PeakList {
+     float *nullsnr_skymap;
+ 
+     /* structure on GPU device */
++    // [THA]: It is important to note that pointers on the host device are not
++    // exposed to the GPU device. For this reason, we can't allocate d_ntoff,
++    // d_snglsnr, etc. here on the stack with sized arrays. Instead, we need
++    // to malloc is when PeakList is built.
+     int *d_npeak;
+     int *d_peak_pos;
+     int *d_len_idx;
+     int *d_tmplt_idx;
+     int *d_pix_idx;
+     int *d_pix_idx_bg; // background Ntoff needs this, do not remove
+-    int *d_ntoff_H;
+-    int *d_ntoff_L;
+-    int *d_ntoff_V;
+-
+-    float *d_snglsnr_H;
+-    float *d_snglsnr_L;
+-    float *d_snglsnr_V;
+-    float *d_coaphase_H;
+-    float *d_coaphase_L;
+-    float *d_coaphase_V;
+-    float *d_chisq_H;
+-    float *d_chisq_L;
+-    float *d_chisq_V;
+-
+-    float *d_snglsnr_bg_H;
+-    float *d_snglsnr_bg_L;
+-    float *d_snglsnr_bg_V;
+-    float *d_coaphase_bg_H;
+-    float *d_coaphase_bg_L;
+-    float *d_coaphase_bg_V;
+-    float *d_chisq_bg_H;
+-    float *d_chisq_bg_L;
+-    float *d_chisq_bg_V;
++    int **d_ntoff; // size (MAX_NIFO)
++
++    float **d_snglsnr; // size (MAX_NIFO)
++    float **d_coaphase; // size (MAX_NIFO)
++    float **d_chisq; // size (MAX_NIFO)
++
++    float **d_snglsnr_bg; // size (MAX_NIFO)
++    float **d_coaphase_bg; // size (MAX_NIFO)
++    float **d_chisq_bg; // size (MAX_NIFO)
+ 
+     float *d_cohsnr;
+     float *d_nullsnr;
+diff --git a/gstlal-spiir/gst/cuda/postcoh/postcoh_kernel.cu b/gstlal-spiir/gst/cuda/postcoh/postcoh_kernel.cu
+index 8c6c6d9a..513a226e 100644
+--- a/gstlal-spiir/gst/cuda/postcoh/postcoh_kernel.cu
++++ b/gstlal-spiir/gst/cuda/postcoh/postcoh_kernel.cu
+@@ -190,8 +190,8 @@ __global__ void
+             peak_pos[index] = i;
+             /* FIXME: could be many peak positions for one peak */
+             //			peak[templ] = -1;
+-            //			printf("peak tmplt %d, time %d, maxsnr %f, snr %f\n", templ,
+-            //i, max_snr, snr);
++            //			printf("peak tmplt %d, time %d, maxsnr %f, snr
++            //%f\n", templ, i, max_snr, snr);
+         }
+         // restemplate[i]  = ((-1 + templ) + (-1 - templ) * ((max_snr > snr) * 2
+         // - 1)) >> 1; ressnr[i]       = (-1.0f + snr) * 0.5 + (-1.0f - snr) *
+@@ -222,24 +222,27 @@ __device__ float gser(float x, float a) {
+ }
+ 
+ __global__ void ker_coh_skymap(
+-  float
+-    *cohsnr_skymap, /* OUTPUT, of size (num_triggers * num_sky_directions) */
+-  float
+-    *nullsnr_skymap, /* OUTPUT, of size (num_triggers * num_sky_directions) */
+-  COMPLEX_F **snr, /* INPUT, (2, 3) * data_points */
++  float *restrict
++    cohsnr_skymap, /* OUTPUT, of size (num_triggers * num_sky_directions) */
++  float *restrict
++    nullsnr_skymap, /* OUTPUT, of size (num_triggers * num_sky_directions) */
++  COMPLEX_F *restrict *restrict snr, /* INPUT, (2, 3) * data_points */
+   int iifo, /* INPUT, detector we are considering */
+   int nifo, /* INPUT, all detectors that are in this coherent analysis */
+-  int *peak_pos, /* INPUT, place the location of the trigger */
+-  float *snglsnr_H, /* INPUT, maximum single snr    */
++  int *restrict peak_pos, /* INPUT, place the location of the trigger */
++  float *restrict *restrict snglsnr, /* INPUT, maximum single snr    */
++  float *restrict cohsnr, /* INPUT, coherent snr */
+   int npeak, /* INPUT, number of triggers */
+-  float *u_map, /* INPUT, u matrix map */
+-  float *toa_diff_map, /* INPUT, time of arrival difference map */
++  float *restrict u_map, /* INPUT, u matrix map */
++  float *restrict toa_diff_map, /* INPUT, time of arrival difference map */
+   int num_sky_directions, /* INPUT, # of sky directions */
+   int max_npeak, /* INPUT, max number of peaks */
+   int len, /* INPUT, snglsnr length */
+   int start_exe, /* INPUT, snglsnr start exe position */
+   float dt, /* INPUT, 1/ sampling rate */
+-  int ntmplt /* INPUT, number of templates */
++  int ntmplt, /* INPUT, number of templates */
++  int *restrict len_idx, /* INPUT, the length of the peaks */
++  int *restrict tmplt_idx /* INPUT, the template used for this peak */
+ ) {
+ 
+     int peak_cur, tmplt_cur, len_cur, ipeak_max;
+@@ -248,7 +251,6 @@ __global__ void ker_coh_skymap(
+     int map_idx, ipix, i;
+     float real, imag;
+     float snr_tmp, al_all = 0.0f;
+-    float *cohsnr = snglsnr_H + 9 * max_npeak;
+     extern __shared__ float smem[];
+ 
+     /* find maximum cohsnr and swope to the first pos */
+@@ -304,9 +306,9 @@ __global__ void ker_coh_skymap(
+     if (npeak > 0) {
+         peak_cur = peak_pos[0];
+         // find the len_cur from len_idx
+-        len_cur = peak_pos[peak_cur + max_npeak];
++        len_cur = len_idx[peak_cur];
+         // find the tmplt_cur from tmplt_idx
+-        tmplt_cur = peak_pos[peak_cur + 2 * max_npeak];
++        tmplt_cur = tmplt_idx[peak_cur];
+ 
+         for (int seed_pix = threadIdx.x; seed_pix < num_sky_directions;
+              seed_pix += blockDim.x) {
+@@ -348,23 +350,19 @@ __global__ void ker_coh_skymap(
+ }
+ 
+ __global__ void ker_coh_max_and_chisq_versatile(
+-  COMPLEX_F **snr, /* INPUT, (2, 3) * data_points */
++  COMPLEX_F *restrict *restrict snr, /* INPUT, (2, 3) * data_points */
+   int iifo, /* INPUT, detector we are considering */
+   int nifo, /* INPUT, all detectors that are in this coherent analysis */
+   int cur_nifo, /* INPUT, all detectors that are in this coherent analysis */
+   int
+     cur_ifo_bits, /* INPUT, all detectors that are in this coherent analysis */
+-  int *write_ifo_mapping, /* INPUT, write-ifo-mapping */
+-  int *peak_pos, /* INPUT, place the location of the trigger */
+-  float *snglsnr_H, /* INPUT, maximum single snr    */
+-  float *snglsnr_bg_H, /* INPUT, maximum single snr    */
+-  float *cohsnr_skymap,
+-  float *nullsnr_skymap,
+-  int output_skymap, /* INPUT, whether to write to cohsnr_skymap and
+-                        nullsnr_skymap */
++  int *restrict write_ifo_mapping, /* INPUT, write-ifo-mapping */
++  int *restrict peak_pos, /* INPUT, place the location of the trigger */
++  float *restrict *restrict snglsnr, /* INPUT, maximum single snr    */
++  float *restrict *restrict snglsnr_bg, /* INPUT, maximum single snr    */
+   int npeak, /* INPUT, number of triggers */
+-  float *u_map, /* INPUT, u matrix map */
+-  float *toa_diff_map, /* INPUT, time of arrival difference map */
++  float *restrict u_map, /* INPUT, u matrix map */
++  float *restrict toa_diff_map, /* INPUT, time of arrival difference map */
+   int num_sky_directions, /* INPUT, # of sky directions */
+   int len, /* INPUT, snglsnr length */
+   int max_npeak, /* INPUT, snglsnr length */
+@@ -372,13 +370,32 @@ __global__ void ker_coh_max_and_chisq_versatile(
+   float dt, /* INPUT, 1/ sampling rate */
+   int ntmplt, /* INPUT, number of templates */
+   int autochisq_len, /* INPUT, auto-chisq length */
+-  COMPLEX_F *
+-    *autocorr_matrix, /* INPUT, autocorrelation matrix for all templates */
+-  float **autocorr_norm, /* INPUT, autocorrelation normalization matrix for all
+-                            templates */
++  COMPLEX_F *restrict *restrict
++    autocorr_matrix, /* INPUT, autocorrelation matrix for all templates */
++  float *restrict *restrict autocorr_norm, /* INPUT, autocorrelation
++                            normalization matrix for all templates */
+   int hist_trials, /* INPUT, trial number */
+-  int trial_sample_inv /* INPUT, trial interval in samples */
+-) {
++  int trial_sample_inv, /* INPUT, trial interval in samples */
++  int *restrict pix_idx, /* OUTPUT, sky direction index */
++  int *restrict pix_idx_bg, /* OUTPUT, sky direction index for the background */
++  float *restrict
++    cohsnr, /* OUTPUT, the coherent SNR for combination of detectors */
++  float *restrict
++    nullsnr, /* OUTPUT, the nullsnr for the combination of detectors */
++  float *restrict
++    cmbchisq, /* OUTPUT, the chisq for the combination of detectors */
++  float *restrict
++    cohsnr_bg, /* OUTPUT, the coherent SNR for the background noise */
++  float *restrict nullsnr_bg, /* OUTPUT, the nullsnr for the background noise */
++  float *restrict
++    cmbchisq_bg, /* OUTPUT, the combined chisq for the background noise */
++  float *restrict *restrict coaphase,
++  float *restrict *restrict coaphase_bg,
++  int *restrict *restrict ntoff,
++  float *restrict *restrict chisq,
++  float *restrict *restrict chisq_bg,
++  int *restrict len_idx,
++  int *restrict tmplt_idx) {
+     int bid = blockIdx.x;
+     int bn  = gridDim.x;
+ 
+@@ -390,10 +407,10 @@ __global__ void ker_coh_max_and_chisq_versatile(
+     // store snr_max, nullstream_max and sky_idx, each has (blockDim.x /
+     // WARP_SIZE) elements
+     extern __shared__ float smem[];
+-    volatile float *stat_shared       = &smem[0];
+-    volatile float *snr_shared        = &stat_shared[wn];
+-    volatile float *nullstream_shared = &snr_shared[wn];
+-    volatile int *sky_idx_shared      = (int *)&nullstream_shared[wn];
++    volatile float *restrict stat_shared       = &smem[0];
++    volatile float *restrict snr_shared        = &stat_shared[wn];
++    volatile float *restrict nullstream_shared = &snr_shared[wn];
++    volatile int *restrict sky_idx_shared      = (int *)&nullstream_shared[wn];
+ 
+     // float    *mu;    // matrix u for certain sky direction
+     int peak_cur, tmplt_cur, ipeak_max = 0;
+@@ -408,21 +425,13 @@ __global__ void ker_coh_max_and_chisq_versatile(
+     float nullstream_max, nullstream_max_tmp;
+     int sky_idx = 0, sky_idx_tmp = 0;
+     int i, itrial, trial_offset, output_offset, len_cur;
+-    int *pix_idx       = peak_pos + 3 * max_npeak;
+-    int *pix_idx_bg    = peak_pos + 4 * max_npeak;
+-    float *cohsnr      = snglsnr_H + 9 * max_npeak;
+-    float *nullsnr     = snglsnr_H + 10 * max_npeak;
+-    float *cmbchisq    = snglsnr_H + 11 * max_npeak;
+-    float *cohsnr_bg   = snglsnr_H + (12 + 9 * hist_trials) * max_npeak;
+-    float *nullsnr_bg  = snglsnr_H + (12 + 10 * hist_trials) * max_npeak;
+-    float *cmbchisq_bg = snglsnr_H + (12 + 11 * hist_trials) * max_npeak;
+ 
+     for (int ipeak = bid; ipeak < npeak; ipeak += bn) {
+         peak_cur = peak_pos[ipeak];
+         // find the len_cur from len_idx
+-        len_cur = peak_pos[peak_cur + max_npeak];
++        len_cur = len_idx[peak_cur];
+         // find the tmplt_cur from tmplt_idx
+-        tmplt_cur = peak_pos[peak_cur + 2 * max_npeak];
++        tmplt_cur = tmplt_idx[peak_cur];
+ 
+         itrial         = 0;
+         stat_max       = 0.0;
+@@ -553,14 +562,12 @@ __global__ void ker_coh_max_and_chisq_versatile(
+              * does not participate */
+             /* set the ntoff; snglsnr; and coa_phase for each detector */
+             /* set the ntoff; this is actually d_ntoff_*  */
+-            peak_pos[peak_cur
+-                     + (4 + hist_trials + write_ifo_mapping[j]) * max_npeak] =
+-              NtOff;
++            ntoff[write_ifo_mapping[j]][peak_cur] = NtOff;
+             /* set the d_snglsnr_* */
+-            snglsnr_H[peak_cur + write_ifo_mapping[j] * max_npeak] = sqrt(
++            snglsnr[write_ifo_mapping[j]][peak_cur] = sqrt(
+               tmp_maxsnr.re * tmp_maxsnr.re + tmp_maxsnr.im * tmp_maxsnr.im);
+             /* set the d_coa_phase_* */
+-            snglsnr_H[peak_cur + (3 + write_ifo_mapping[j]) * max_npeak] =
++            coaphase[write_ifo_mapping[j]][peak_cur] =
+               atan2(tmp_maxsnr.im, tmp_maxsnr.re);
+ 
+             for (int ishift = threadIdx.x - autochisq_half_len;
+@@ -589,15 +596,14 @@ __global__ void ker_coh_max_and_chisq_versatile(
+                 if (srcLane == 0) {
+                     chisq_cur = laneChi2 / autocorr_norm[j][tmplt_cur];
+                     // the location of chisq_* is indexed from maxsnglsnr
+-                    snglsnr_H[peak_cur
+-                              + (6 + write_ifo_mapping[j]) * max_npeak] =
+-                      chisq_cur;
++                    chisq[write_ifo_mapping[j]][peak_cur] = chisq_cur;
+ 
+                     if (((1 << j) & cur_ifo_bits) > 0)
+                         cmbchisq[peak_cur] += chisq_cur;
+                     // printf("peak %d, itrial %d, cohsnr %f, nullstream %f,
+                     // ipix %d, chisq %f\n", ipeak, itrial, cohsnr[peak_cur],
+-                    // nullsnr[peak_cur], pix_idx[peak_cur], cmbchisq[peak_cur]);
++                    // nullsnr[peak_cur], pix_idx[peak_cur],
++                    // cmbchisq[peak_cur]);
+                 }
+             }
+             __syncthreads();
+@@ -752,14 +758,11 @@ __global__ void ker_coh_max_and_chisq_versatile(
+                 tmp_maxsnr =
+                   snr[j][len * tmplt_cur + ((peak_pos_tmp + len) % len)];
+                 /* set the d_snglsnr_* */
+-                snglsnr_bg_H[output_offset
+-                             + write_ifo_mapping[j] * hist_trials * max_npeak] =
++                snglsnr_bg[write_ifo_mapping[j]][output_offset] =
+                   sqrt(tmp_maxsnr.re * tmp_maxsnr.re
+                        + tmp_maxsnr.im * tmp_maxsnr.im);
+                 /* set the d_coa_phase_* */
+-                snglsnr_bg_H[output_offset
+-                             + (3 + write_ifo_mapping[j]) * hist_trials
+-                                 * max_npeak] =
++                coaphase_bg[write_ifo_mapping[j]][output_offset] =
+                   atan2(tmp_maxsnr.im, tmp_maxsnr.re);
+ 
+                 for (int ishift = srcLane - autochisq_half_len;
+@@ -783,10 +786,8 @@ __global__ void ker_coh_max_and_chisq_versatile(
+ 
+                 if (srcLane == 0) {
+                     chisq_cur = laneChi2 / autocorr_norm[j][tmplt_cur];
+-                    // set d_chisq_bg_* from snglsnr_bg_H
+-                    snglsnr_bg_H[output_offset
+-                                 + (6 + write_ifo_mapping[j]) * hist_trials
+-                                     * max_npeak] = chisq_cur;
++                    // set d_chisq_bg_* from snglsnr_bg
++                    chisq_bg[write_ifo_mapping[j]][output_offset] = chisq_cur;
+                     cmbchisq_bg[output_offset] += chisq_cur;
+                 }
+ 
+@@ -794,481 +795,16 @@ __global__ void ker_coh_max_and_chisq_versatile(
+ 
+                 __syncthreads();
+             }
+-
+-            __syncthreads();
+-        }
+-    }
+-}
+-
+-__global__ void ker_coh_max_and_chisq(
+-  COMPLEX_F **snr, /* INPUT, (2, 3) * data_points */
+-  int iifo, /* INPUT, detector we are considering */
+-  int nifo, /* INPUT, all detectors that are in this coherent analysis */
+-  int *write_ifo_mapping, /* INPUT, write-ifo-mapping */
+-  int *peak_pos, /* INPUT, place the location of the trigger */
+-  float *snglsnr_H, /* INPUT, maximum single snr    */
+-  float *snglsnr_bg_H, /* INPUT, maximum single snr    */
+-  float *cohsnr_skymap,
+-  float *nullsnr_skymap,
+-  int output_skymap, /* INPUT, whether to write to cohsnr_skymap and
+-                        nullsnr_skymap */
+-  int npeak, /* INPUT, number of triggers */
+-  float *u_map, /* INPUT, u matrix map */
+-  float *toa_diff_map, /* INPUT, time of arrival difference map */
+-  int num_sky_directions, /* INPUT, # of sky directions */
+-  int len, /* INPUT, snglsnr length */
+-  int max_npeak, /* INPUT, snglsnr length */
+-  int start_exe, /* INPUT, snglsnr start exe position */
+-  float dt, /* INPUT, 1/ sampling rate */
+-  int ntmplt, /* INPUT, number of templates */
+-  int autochisq_len, /* INPUT, auto-chisq length */
+-  COMPLEX_F *
+-    *autocorr_matrix, /* INPUT, autocorrelation matrix for all templates */
+-  float **autocorr_norm, /* INPUT, autocorrelation normalization matrix for all
+-                            templates */
+-  int hist_trials, /* INPUT, trial number */
+-  int trial_sample_inv /* INPUT, trial interval in samples */
+-) {
+-    int bid = blockIdx.x;
+-    int bn  = gridDim.x;
+-
+-    int wn  = blockDim.x >> LOG_WARP_SIZE;
+-    int wID = threadIdx.x >> LOG_WARP_SIZE;
+-
+-    int srcLane = threadIdx.x & 0x1f, ipix; // binary: 11111, decimal 31
+-    // store snr_max, nullstream_max and sky_idx, each has (blockDim.x /
+-    // WARP_SIZE) elements
+-    extern __shared__ float smem[];
+-    volatile float *stat_shared       = &smem[0];
+-    volatile float *snr_shared        = &stat_shared[wn];
+-    volatile float *nullstream_shared = &snr_shared[wn];
+-    volatile int *sky_idx_shared      = (int *)&nullstream_shared[wn];
+-
+-    // float    *mu;    // matrix u for certain sky direction
+-    int peak_cur, tmplt_cur, ipeak_max = 0;
+-    COMPLEX_F dk[MAXIFOS];
+-    int NtOff;
+-    int map_idx;
+-    float real, imag;
+-    float al_all = 0.0f, chisq_cur;
+-
+-    float stat_max, stat_tmp;
+-    float snr_max, snr_tmp;
+-    float nullstream_max, nullstream_max_tmp;
+-    int sky_idx = 0, sky_idx_tmp = 0;
+-    int i, itrial, trial_offset, output_offset, len_cur;
+-    int *pix_idx       = peak_pos + 3 * max_npeak;
+-    int *pix_idx_bg    = peak_pos + 4 * max_npeak;
+-    float *cohsnr      = snglsnr_H + 9 * max_npeak;
+-    float *nullsnr     = snglsnr_H + 10 * max_npeak;
+-    float *cmbchisq    = snglsnr_H + 11 * max_npeak;
+-    float *cohsnr_bg   = snglsnr_H + (12 + 9 * hist_trials) * max_npeak;
+-    float *nullsnr_bg  = snglsnr_H + (12 + 10 * hist_trials) * max_npeak;
+-    float *cmbchisq_bg = snglsnr_H + (12 + 11 * hist_trials) * max_npeak;
+-
+-    for (int ipeak = bid; ipeak < npeak; ipeak += bn) {
+-        peak_cur = peak_pos[ipeak];
+-        // find the len_cur from len_idx
+-        len_cur = peak_pos[peak_cur + max_npeak];
+-        // find the tmplt_cur from tmplt_idx
+-        tmplt_cur = peak_pos[peak_cur + 2 * max_npeak];
+-
+-        itrial         = 0;
+-        stat_max       = 0.0;
+-        snr_max        = 0.0;
+-        nullstream_max = 0.0f;
+-        sky_idx        = 0;
+-
+-        for (int seed_pix = threadIdx.x;
+-             seed_pix < num_sky_directions / NSKY_REDUCE_RATIO;
+-             seed_pix += blockDim.x) {
+-            ipix = seed_pix * NSKY_REDUCE_RATIO;
+-
+-            snr_tmp = 0.0;
+-            al_all  = 0.0;
+-            // matrix u is stored in column order
+-            // mu = u_map + nifo * nifo * i;
+-
+-            for (int j = 0; j < nifo; ++j) {
+-                /* this is a simplified algorithm to get map_idx */
+-                map_idx = iifo * nifo + j;
+-                NtOff =
+-                  round(toa_diff_map[map_idx * num_sky_directions + ipix] / dt);
+-                NtOff = (j == iifo ? 0 : NtOff);
+-                // dk[j] = snr[j][((start_exe + len_cur + NtOff + len) % len) *
+-                // ntmplt + tmplt_cur ];
+-                dk[j] = snr[j][tmplt_cur * len
+-                               + ((start_exe + len_cur + NtOff + len) % len)];
+-            }
+-
+-            for (int j = 0; j < nifo; ++j) {
+-                real = 0.0f;
+-                imag = 0.0f;
+-                for (int k = 0; k < nifo; ++k) {
+-                    // transpose of u_map
+-                    real += u_map[(k * nifo + j) * num_sky_directions + ipix]
+-                            * dk[k].re;
+-                    imag += u_map[(k * nifo + j) * num_sky_directions + ipix]
+-                            * dk[k].im;
+-                }
+-                (j < 2 ? snr_tmp : al_all) += real * real + imag * imag;
+-            }
+-
+-            stat_tmp = snr_tmp - 0.0;
+-            if (stat_tmp > stat_max) {
+-                stat_max       = stat_tmp;
+-                snr_max        = snr_tmp;
+-                nullstream_max = al_all;
+-                sky_idx        = ipix;
+-            }
+-        }
+-
+-        for (i = WARP_SIZE / 2; i > 0; i = i >> 1) {
+-            stat_tmp           = __shfl_xor(stat_max, i);
+-            snr_tmp            = __shfl_xor(snr_max, i);
+-            nullstream_max_tmp = __shfl_xor(nullstream_max, i);
+-            sky_idx_tmp        = __shfl_xor(sky_idx, i);
+-
+-            if (stat_tmp > stat_max) {
+-                stat_max       = stat_tmp;
+-                snr_max        = snr_tmp;
+-                nullstream_max = nullstream_max_tmp;
+-                sky_idx        = sky_idx_tmp;
+-            }
+-        }
+-
+-        if (srcLane == 0) {
+-            stat_shared[wID]       = stat_max;
+-            snr_shared[wID]        = snr_max;
+-            nullstream_shared[wID] = nullstream_max;
+-            sky_idx_shared[wID]    = sky_idx;
+-        }
+-        __syncthreads();
+-
+-        for (i = wn >> 1; i > 0; i = i >> 1) {
+-            if (threadIdx.x < i) {
+-                stat_tmp = stat_shared[threadIdx.x + i];
+-                stat_max = stat_shared[threadIdx.x];
+-
+-                if (stat_tmp > stat_max) {
+-                    stat_shared[threadIdx.x] = stat_tmp;
+-                    snr_shared[threadIdx.x]  = snr_shared[threadIdx.x + i];
+-                    nullstream_shared[threadIdx.x] =
+-                      nullstream_shared[threadIdx.x + i];
+-                    sky_idx_shared[threadIdx.x] =
+-                      sky_idx_shared[threadIdx.x + i];
+-                }
+-            }
+-            __syncthreads();
+-        }
+-        if (threadIdx.x == 0) {
+-            cohsnr[peak_cur]  = snr_shared[0];
+-            nullsnr[peak_cur] = nullstream_shared[0];
+-            pix_idx[peak_cur] = sky_idx_shared[0];
+-        }
+-        __syncthreads();
+-
+-        /* chisq calculation */
+-
+-        COMPLEX_F data, tmp_snr, tmp_autocorr, tmp_maxsnr;
+-        float laneChi2         = 0.0f;
+-        int autochisq_half_len = autochisq_len / 2, peak_pos_tmp;
+-
+-        cmbchisq[peak_cur] = 0.0;
+-
+-        for (int j = 0; j < nifo; ++j) {
+-            laneChi2 = 0.0f;
+-            /* this is a simplified algorithm to get map_idx */
+-            map_idx = iifo * nifo + j;
+-
+-            NtOff = round(
+-              toa_diff_map[map_idx * num_sky_directions + pix_idx[peak_cur]]
+-              / dt);
+-            peak_pos_tmp = start_exe + len_cur + (j == iifo ? 0 : NtOff + len);
+-
+-            // tmp_maxsnr = snr[j][((peak_pos_tmp + len) % len) * ntmplt +
+-            // tmplt_cur];
+-            tmp_maxsnr = snr[j][len * tmplt_cur + ((peak_pos_tmp + len) % len)];
+-            /* set the ntoff; snglsnr; and coa_phase for each detector */
+-            /* set the ntoff; this is actually d_ntoff_*  */
+-            peak_pos[peak_cur
+-                     + (4 + hist_trials + write_ifo_mapping[j]) * max_npeak] =
+-              NtOff;
+-            /* set the d_snglsnr_* */
+-            snglsnr_H[peak_cur + write_ifo_mapping[j] * max_npeak] = sqrt(
+-              tmp_maxsnr.re * tmp_maxsnr.re + tmp_maxsnr.im * tmp_maxsnr.im);
+-            /* set the d_coa_phase_* */
+-            snglsnr_H[peak_cur + (3 + write_ifo_mapping[j]) * max_npeak] =
+-              atan2(tmp_maxsnr.im, tmp_maxsnr.re);
+-
+-            for (int ishift = threadIdx.x - autochisq_half_len;
+-                 ishift <= autochisq_half_len; ishift += blockDim.x) {
+-                tmp_snr = snr[j][len * tmplt_cur
+-                                 + ((peak_pos_tmp + ishift + len) % len)];
+-                tmp_autocorr =
+-                  autocorr_matrix[j][tmplt_cur * autochisq_len + ishift
+-                                     + autochisq_half_len];
+-                data.re = tmp_snr.re - tmp_maxsnr.re * tmp_autocorr.re
+-                          + tmp_maxsnr.im * tmp_autocorr.im;
+-                data.im = tmp_snr.im - tmp_maxsnr.re * tmp_autocorr.im
+-                          - tmp_maxsnr.im * tmp_autocorr.re;
+-                laneChi2 += (data.re * data.re + data.im * data.im);
+-            }
+-            for (int k = WARP_SIZE >> 1; k > 0; k = k >> 1) {
+-                laneChi2 += __shfl_xor(laneChi2, k, WARP_SIZE);
+-            }
+-            if (srcLane == 0) { snr_shared[wID] = laneChi2; }
+-            __syncthreads();
+-            if (threadIdx.x < wn) {
+-                laneChi2 = snr_shared[srcLane];
+-                for (i = wn / 2; i > 0; i = i >> 1) {
+-                    laneChi2 += __shfl_xor(laneChi2, i);
+-                }
+-                if (srcLane == 0) {
+-                    chisq_cur = laneChi2 / autocorr_norm[j][tmplt_cur];
+-                    // the location of chisq_* is indexed from maxsnglsnr
+-                    snglsnr_H[peak_cur
+-                              + (6 + write_ifo_mapping[j]) * max_npeak] =
+-                      chisq_cur;
+-
+-                    cmbchisq[peak_cur] += chisq_cur;
+-                    // printf("peak %d, itrial %d, cohsnr %f, nullstream %f,
+-                    // ipix %d, chisq %f\n", ipeak, itrial, cohsnr[peak_cur],
+-                    // nullsnr[peak_cur], pix_idx[peak_cur], cmbchisq[peak_cur]);
+-                }
+-            }
+-            __syncthreads();
+-        }
+-
+-        __syncthreads();
+-
+-        /*
+-         *
+-         * Generate background cohsnr; nullsnr; chisq
+-         *
+-         */
+-
+-        int ipix = 0, rand_range = trial_sample_inv * hist_trials - 1;
+-        for (itrial = 1 + threadIdx.x / WARP_SIZE; itrial <= hist_trials;
+-             itrial += blockDim.x / WARP_SIZE) {
+-            snr_max        = 0.0;
+-            nullstream_max = 0.0;
+-            sky_idx        = 0;
+-
+-            // FIXME: try using random offset like the following
+-            // trial_offset = rand()% rand_range + 1;
+-            trial_offset  = itrial * trial_sample_inv;
+-            output_offset = peak_cur + (itrial - 1) * max_npeak;
+-            for (int seed_pix = srcLane;
+-                 seed_pix < num_sky_directions / NSKY_REDUCE_RATIO;
+-                 seed_pix += WARP_SIZE) {
+-                snr_tmp = 0.0;
+-                al_all  = 0.0;
+-                // matrix u is stored in column order
+-                // mu = u_map + nifo * nifo * i;
+-
+-                ipix = (seed_pix * NSKY_REDUCE_RATIO)
+-                       + (itrial & (NSKY_REDUCE_RATIO - 1));
+-                for (int j = 0; j < nifo; ++j) {
+-                    /* this is a simplified algorithm to get map_idx */
+-                    map_idx = iifo * nifo + j;
+-
+-                    NtOff = round(
+-                      toa_diff_map[map_idx * num_sky_directions + ipix] / dt);
+-                    // The background cohsnr should be obtained coherently as
+-                    // well.
+-                    int offset =
+-                      (j == iifo ? 0 : NtOff - (trial_offset * (j - iifo)));
+-                    // dk[j] = snr[j][((start_exe + len_cur + offset + len) %
+-                    // len) * ntmplt + tmplt_cur ];
+-                    dk[j] =
+-                      snr[j][len * tmplt_cur
+-                             + ((start_exe + len_cur + offset + len) % len)];
+-                }
+-
+-                for (int j = 0; j < nifo; ++j) {
+-                    real = 0.0f;
+-                    imag = 0.0f;
+-                    for (int k = 0; k < nifo; ++k) {
+-                        // transpose of u_map
+-                        real +=
+-                          u_map[(k * nifo + j) * num_sky_directions + ipix]
+-                          * dk[k].re;
+-                        imag +=
+-                          u_map[(k * nifo + j) * num_sky_directions + ipix]
+-                          * dk[k].im;
+-                    }
+-                    (j < 2 ? snr_tmp : al_all) += real * real + imag * imag;
+-                }
+-
+-                stat_tmp = snr_tmp - 0.0;
+-                if (stat_tmp > stat_max) {
+-                    stat_max       = stat_tmp;
+-                    snr_max        = snr_tmp;
+-                    nullstream_max = al_all;
+-                    sky_idx        = ipix;
+-                }
+-            }
+-
+-            for (i = WARP_SIZE / 2; i > 0; i = i >> 1) {
+-                stat_tmp           = __shfl_xor(stat_max, i);
+-                snr_tmp            = __shfl_xor(snr_max, i);
+-                nullstream_max_tmp = __shfl_xor(nullstream_max, i);
+-                sky_idx_tmp        = __shfl_xor(sky_idx, i);
+-
+-                if (stat_tmp > stat_max) {
+-                    stat_max       = stat_tmp;
+-                    snr_max        = snr_tmp;
+-                    nullstream_max = nullstream_max_tmp;
+-                    sky_idx        = sky_idx_tmp;
+-                }
+-            }
+-            if (srcLane == 0) {
+-                cohsnr_bg[output_offset]  = snr_max;
+-                nullsnr_bg[output_offset] = nullstream_max;
+-                /* background need this for Ntoff */
+-                pix_idx_bg[output_offset] = sky_idx;
+-            }
+-            __syncthreads();
+-
+-            /* c code here
+-            COMPLEX_F data;
+-            chisq[peak_cur] = 0.0;
+-            int autochisq_half_len = autochisq_len /2;
+-            for (int j = 0; j < nifo; ++j)
+-            {   data = 0;
+-                // this is a simplified algorithm to get map_idx
+-                map_idx = iifo * nifo + j;
+-                NtOff = round (toa_diff_map[map_idx * num_sky_directions + ipix]
+-            / dt); for(int ishift=-autochisq_half_len;
+-            ishift<=autochisq_half_len; ishift++)
+-                {
+-
+-                data += snr[j][((start_exe + peak_cur + NtOff + ishift) % len) *
+-            ntmplt + tmplt_cur] - maxsnglsnr[peak_cur] * autocorr_matrix[j][
+-            tmplt_cur * autochisq_len + ishift + autochisq_half_len];
+-                }
+-                chisq[peak_cur] += (data.re * data.re + data.im * data.im) /
+-            autocorr_norm[j][tmplt_cur];
+-            }
+-            */
+-            COMPLEX_F data, tmp_snr, tmp_autocorr, tmp_maxsnr;
+-            float laneChi2         = 0.0f;
+-            int autochisq_half_len = autochisq_len / 2, peak_pos_tmp;
+-
+-            cmbchisq_bg[output_offset] = 0.0;
+-
+-            for (int j = 0; j < nifo; ++j) {
+-                laneChi2 = 0.0f;
+-                /* this is a simplified algorithm to get map_idx */
+-                map_idx = iifo * nifo + j;
+-
+-                NtOff = round(toa_diff_map[map_idx * num_sky_directions
+-                                           + pix_idx_bg[output_offset]]
+-                              / dt);
+-
+-                peak_pos_tmp =
+-                  start_exe + len_cur
+-                  + (j == iifo ? 0 : NtOff - (trial_offset * (j - iifo)) + len);
+-
+-                // tmp_maxsnr = snr[j][((peak_pos_tmp + len) % len) * ntmplt +
+-                // tmplt_cur];
+-                tmp_maxsnr =
+-                  snr[j][len * tmplt_cur + ((peak_pos_tmp + len) % len)];
+-                /* set the d_snglsnr_* */
+-                snglsnr_bg_H[output_offset
+-                             + write_ifo_mapping[j] * hist_trials * max_npeak] =
+-                  sqrt(tmp_maxsnr.re * tmp_maxsnr.re
+-                       + tmp_maxsnr.im * tmp_maxsnr.im);
+-                /* set the d_coa_phase_* */
+-                snglsnr_bg_H[output_offset
+-                             + (3 + write_ifo_mapping[j]) * hist_trials
+-                                 * max_npeak] =
+-                  atan2(tmp_maxsnr.im, tmp_maxsnr.re);
+-
+-                for (int ishift = srcLane - autochisq_half_len;
+-                     ishift <= autochisq_half_len; ishift += WARP_SIZE) {
+-                    // tmp_snr = snr[j][((peak_pos_tmp + ishift + len) % len) *
+-                    // ntmplt + tmplt_cur];
+-                    tmp_snr = snr[j][len * tmplt_cur
+-                                     + ((peak_pos_tmp + ishift + len) % len)];
+-                    tmp_autocorr =
+-                      autocorr_matrix[j][tmplt_cur * autochisq_len + ishift
+-                                         + autochisq_half_len];
+-                    data.re = tmp_snr.re - tmp_maxsnr.re * tmp_autocorr.re
+-                              + tmp_maxsnr.im * tmp_autocorr.im;
+-                    data.im = tmp_snr.im - tmp_maxsnr.re * tmp_autocorr.im
+-                              - tmp_maxsnr.im * tmp_autocorr.re;
+-                    laneChi2 += (data.re * data.re + data.im * data.im);
+-                }
+-                for (int k = WARP_SIZE >> 1; k > 0; k = k >> 1) {
+-                    laneChi2 += __shfl_xor(laneChi2, k, WARP_SIZE);
+-                }
+-
+-                if (srcLane == 0) {
+-                    chisq_cur = laneChi2 / autocorr_norm[j][tmplt_cur];
+-                    // set d_chisq_bg_* from snglsnr_bg_H
+-                    snglsnr_bg_H[output_offset
+-                                 + (6 + write_ifo_mapping[j]) * hist_trials
+-                                     * max_npeak] = chisq_cur;
+-
+-                    cmbchisq_bg[output_offset] += chisq_cur;
+-                }
+-                __syncthreads();
+-            }
+-
+             __syncthreads();
+         }
+     }
+-    /* find maximum cohsnr and swope to the first pos */
+-    volatile float *cohsnr_shared = &smem[0];
+-    volatile float *ipeak_shared  = &smem[blockDim.x];
+-    float cohsnr_max              = 0.0, cohsnr_cur;
+-
+-    if (bid == 0 && npeak > 1) {
+-        /* clean up smem history */
+-        cohsnr_shared[threadIdx.x] = 0.0;
+-        ipeak_shared[threadIdx.x]  = 0;
+-        __syncthreads();
+-        for (i = threadIdx.x; i < npeak; i += blockDim.x) {
+-            peak_cur   = peak_pos[i];
+-            cohsnr_cur = cohsnr[peak_cur];
+-            if (cohsnr_cur > cohsnr_max) {
+-                cohsnr_shared[threadIdx.x] = cohsnr_cur;
+-                ipeak_shared[threadIdx.x]  = i;
+-                cohsnr_max                 = cohsnr_cur;
+-            }
+-        }
+-        __syncthreads();
+-        for (i = blockDim.x >> 1; i > 0; i = i >> 1) {
+-            if (threadIdx.x < i) {
+-                cohsnr_cur = cohsnr_shared[threadIdx.x + i];
+-                cohsnr_max = cohsnr_shared[threadIdx.x];
+-
+-                if (cohsnr_cur > cohsnr_max) {
+-                    cohsnr_shared[threadIdx.x] = cohsnr_cur;
+-                    ipeak_shared[threadIdx.x]  = ipeak_shared[threadIdx.x + i];
+-                }
+-            }
+-            __syncthreads();
+-        }
+-
+-        /* swope the first and max peak_cur in peak_pos */
+-
+-        if (threadIdx.x == 0) {
+-            ipeak_max           = ipeak_shared[0];
+-            peak_cur            = peak_pos[ipeak_max];
+-            peak_pos[ipeak_max] = peak_pos[0];
+-            peak_pos[0]         = peak_cur;
+-        }
+-    }
+ }
+ 
+ #define TRANSPOSE_TILE_DIM   32
+ #define TRANSPOSE_BLOCK_ROWS 8
+ 
+-__global__ void transpose_matrix(COMPLEX_F *idata,
+-                                 COMPLEX_F *odata,
++__global__ void transpose_matrix(COMPLEX_F *restrict idata,
++                                 COMPLEX_F *restrict odata,
+                                  int in_x_offset,
+                                  int in_y_offset,
+                                  int in_width,
+@@ -1370,42 +906,20 @@ void cohsnr_and_chisq(PostcohState *state,
+       MAX(2 * threads * sizeof(float), 4 * threads / WARP_SIZE * sizeof(float));
+     PeakList *pklist = state->peak_list[iifo];
+     int npeak        = pklist->npeak[0];
+-    /*
+-            ker_coh_max_and_chisq<<<npeak, threads, sharedsize, stream>>>(
+-                                                                            state->dd_snglsnr,
+-                                                                            iifo,
+-                                                                            state->nifo,
+-                                                                            state->d_write_ifo_mapping,
+-                                                                            pklist->d_peak_pos,
+-                                                                            pklist->d_snglsnr_H,
+-                                                                            pklist->d_snglsnr_bg_H,
+-                                                                            pklist->d_cohsnr_skymap,
+-                                                                            pklist->d_nullsnr_skymap,
+-                                                                            output_skymap,
+-                                                                            pklist->npeak[0],
+-                                                                            state->d_U_map[gps_idx],
+-                                                                            state->d_diff_map[gps_idx],
+-                                                                            state->npix,
+-                                                                            state->snglsnr_len,
+-                                                                            state->max_npeak,
+-                                                                            state->snglsnr_start_exe,
+-                                                                            state->dt,
+-                                                                            state->ntmplt,
+-                                                                            state->autochisq_len,
+-                                                                            state->dd_autocorr_matrix,
+-                                                                            state->dd_autocorr_norm,
+-                                                                            state->hist_trials,
+-                                                                            state->trial_sample_inv);
+-    */
++
+     ker_coh_max_and_chisq_versatile<<<npeak, threads, sharedsize, stream>>>(
+       state->dd_snglsnr, iifo, state->nifo, state->cur_nifo,
+       state->cur_ifo_bits, state->d_write_ifo_mapping, pklist->d_peak_pos,
+-      pklist->d_snglsnr_H, pklist->d_snglsnr_bg_H, pklist->d_cohsnr_skymap,
+-      pklist->d_nullsnr_skymap, output_skymap, pklist->npeak[0],
++      pklist->d_snglsnr, pklist->d_snglsnr_bg, pklist->npeak[0],
+       state->d_U_map[gps_idx], state->d_diff_map[gps_idx], state->npix,
+       state->snglsnr_len, state->max_npeak, state->snglsnr_start_exe, state->dt,
+       state->ntmplt, state->autochisq_len, state->dd_autocorr_matrix,
+-      state->dd_autocorr_norm, state->hist_trials, state->trial_sample_inv);
++      state->dd_autocorr_norm, state->hist_trials, state->trial_sample_inv,
++      pklist->d_pix_idx, pklist->d_pix_idx_bg, pklist->d_cohsnr,
++      pklist->d_nullsnr, pklist->d_cmbchisq, pklist->d_cohsnr_bg,
++      pklist->d_nullsnr_bg, pklist->d_cmbchisq_bg, pklist->d_coaphase,
++      pklist->d_coaphase_bg, pklist->d_ntoff, pklist->d_chisq,
++      pklist->d_chisq_bg, pklist->d_len_idx, pklist->d_tmplt_idx);
+ 
+     CUDA_CHECK(cudaStreamSynchronize(stream));
+     CUDA_CHECK(cudaPeekAtLastError());
+@@ -1413,10 +927,11 @@ void cohsnr_and_chisq(PostcohState *state,
+     if (output_skymap && state->snglsnr_max[iifo] > output_skymap) {
+         ker_coh_skymap<<<1, threads, sharedsize, stream>>>(
+           pklist->d_cohsnr_skymap, pklist->d_nullsnr_skymap, state->dd_snglsnr,
+-          iifo, state->nifo, pklist->d_peak_pos, pklist->d_snglsnr_H,
+-          pklist->npeak[0], state->d_U_map[gps_idx], state->d_diff_map[gps_idx],
+-          state->npix, state->max_npeak, state->snglsnr_len,
+-          state->snglsnr_start_exe, state->dt, state->ntmplt);
++          iifo, state->nifo, pklist->d_peak_pos, pklist->d_snglsnr,
++          pklist->d_cohsnr, pklist->npeak[0], state->d_U_map[gps_idx],
++          state->d_diff_map[gps_idx], state->npix, state->max_npeak,
++          state->snglsnr_len, state->snglsnr_start_exe, state->dt,
++          state->ntmplt, pklist->d_len_idx, pklist->d_tmplt_idx);
+ 
+         CUDA_CHECK(cudaStreamSynchronize(stream));
+         CUDA_CHECK(cudaPeekAtLastError());
+@@ -1427,7 +942,7 @@ void cohsnr_and_chisq(PostcohState *state,
+     }
+ 
+     /* copy the snr, cohsnr, nullsnr, chisq out */
+-    CUDA_CHECK(cudaMemcpyAsync(pklist->snglsnr_H, pklist->d_snglsnr_H,
++    CUDA_CHECK(cudaMemcpyAsync(pklist->snglsnr[0], pklist->d_snglsnr[0],
+                                sizeof(float) * (pklist->peak_floatlen),
+                                cudaMemcpyDeviceToHost, stream));
+ 
+diff --git a/gstlal-spiir/gst/cuda/postcoh/postcoh_utils.c b/gstlal-spiir/gst/cuda/postcoh/postcoh_utils.c
+index 555b6818..c04803ef 100644
+--- a/gstlal-spiir/gst/cuda/postcoh/postcoh_utils.c
++++ b/gstlal-spiir/gst/cuda/postcoh/postcoh_utils.c
+@@ -169,71 +169,107 @@ PeakList *create_peak_list(PostcohState *state, cudaStream_t stream) {
+ #endif
+     PeakList *pklist = (PeakList *)malloc(sizeof(PeakList));
+ 
+-    int peak_intlen       = (7 + hist_trials) * max_npeak + 1;
+-    int peak_floatlen     = (12 + hist_trials * 12) * max_npeak;
++    int peak_intlen = (4 + MAX_NIFO + hist_trials) * max_npeak + 1;
++    int peak_floatlen =
++      ((4 * MAX_NIFO) + (hist_trials * 4 * MAX_NIFO)) * max_npeak;
+     pklist->peak_intlen   = peak_intlen;
+     pklist->peak_floatlen = peak_floatlen;
+ 
++    // [THA]: Why do we use `cudaMallocManaged()` sometimes below? Well, a large
++    // number of the below pointers are to 2D arrays that we won't be accessing
++    // after setting up, but whilst we're setting them up they need to be able
++    // to be accessed on the CPU. `cudaMallocManaged()` allows us to access the
++    // memory involved on both the CPU and GPU, which means that we can assign
++    // the pointers here instead of having to do an awkward `cudaMemcpyAsync()`
++    // to copy across the right pointer.
++    //
++    // It's likely that there will be a small performance hit for having used
++    // `cudaMallocManaged()` instead of doing an async copy, so if its needed
++    // to, the below code can definitely can be changed and will work with
++    // `cudaMemcpyAsync()`.
++    //
++    // FIXME: Move to `cudaMemcpyAsync()` instead of `cudaMallocManaged()` for a
++    // slight performance bump
++
+     /* create device space for peak list for int-type variables */
+     CUDA_CHECK(
+       cudaMalloc((void **)&(pklist->d_npeak), sizeof(int) * peak_intlen));
+     CUDA_CHECK(
+       cudaMemsetAsync(pklist->d_npeak, 0, sizeof(int) * peak_intlen, stream));
+-    pklist->d_peak_pos   = pklist->d_npeak + 1;
+-    pklist->d_len_idx    = pklist->d_npeak + 1 + max_npeak;
++    pklist->d_peak_pos   = pklist->d_npeak + 1 + 0 * max_npeak;
++    pklist->d_len_idx    = pklist->d_npeak + 1 + 1 * max_npeak;
+     pklist->d_tmplt_idx  = pklist->d_npeak + 1 + 2 * max_npeak;
+     pklist->d_pix_idx    = pklist->d_npeak + 1 + 3 * max_npeak;
+     pklist->d_pix_idx_bg = pklist->d_npeak + 1 + 4 * max_npeak;
+-    pklist->d_ntoff_H    = pklist->d_npeak + 1 + (4 + hist_trials) * max_npeak;
+-    pklist->d_ntoff_L    = pklist->d_npeak + 1 + (5 + hist_trials) * max_npeak;
+-    pklist->d_ntoff_V    = pklist->d_npeak + 1 + (6 + hist_trials) * max_npeak;
++    CUDA_CHECK(cudaMallocManaged((void **)&(pklist->d_ntoff),
++                                 sizeof(int *) * MAX_NIFO,
++                                 cudaMemAttachGlobal));
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        pklist->d_ntoff[i] =
++          pklist->d_npeak + 1 + ((4 + hist_trials + i) * max_npeak);
++    }
+ 
+     // printf("d_npeak %p\n", pklist->d_npeak);
+     // CUDA_CHECK(cudaMemsetAsync(pklist->d_npeak, 0, sizeof(int), stream));
+ 
+     /* create device space for peak list for float-type variables */
+-    CUDA_CHECK(cudaMalloc((void **)&(pklist->d_snglsnr_H),
++    CUDA_CHECK(cudaMallocManaged((void **)&(pklist->d_snglsnr),
++                                 sizeof(float *) * MAX_NIFO,
++                                 cudaMemAttachGlobal));
++    CUDA_CHECK(cudaMallocManaged((void **)&(pklist->d_coaphase),
++                                 sizeof(float *) * MAX_NIFO,
++                                 cudaMemAttachGlobal));
++    CUDA_CHECK(cudaMallocManaged((void **)&(pklist->d_chisq),
++                                 sizeof(float *) * MAX_NIFO,
++                                 cudaMemAttachGlobal));
++    CUDA_CHECK(cudaMallocManaged((void **)&(pklist->d_snglsnr_bg),
++                                 sizeof(float *) * MAX_NIFO,
++                                 cudaMemAttachGlobal));
++    CUDA_CHECK(cudaMallocManaged((void **)&(pklist->d_coaphase_bg),
++                                 sizeof(float *) * MAX_NIFO,
++                                 cudaMemAttachGlobal));
++    CUDA_CHECK(cudaMallocManaged((void **)&(pklist->d_chisq_bg),
++                                 sizeof(float *) * MAX_NIFO,
++                                 cudaMemAttachGlobal));
++
++    CUDA_CHECK(cudaMalloc((void **)&(pklist->d_snglsnr[0]),
+                           sizeof(float) * peak_floatlen));
+-    CUDA_CHECK(cudaMemsetAsync(pklist->d_snglsnr_H, 0,
++    CUDA_CHECK(cudaMemsetAsync(pklist->d_snglsnr[0], 0,
+                                sizeof(float) * peak_floatlen, stream));
+-    pklist->d_snglsnr_L  = pklist->d_snglsnr_H + max_npeak;
+-    pklist->d_snglsnr_V  = pklist->d_snglsnr_H + 2 * max_npeak;
+-    pklist->d_coaphase_H = pklist->d_snglsnr_H + 3 * max_npeak;
+-    pklist->d_coaphase_L = pklist->d_snglsnr_H + 4 * max_npeak;
+-    pklist->d_coaphase_V = pklist->d_snglsnr_H + 5 * max_npeak;
+-    pklist->d_chisq_H    = pklist->d_snglsnr_H + 6 * max_npeak;
+-    pklist->d_chisq_L    = pklist->d_snglsnr_H + 7 * max_npeak;
+-    pklist->d_chisq_V    = pklist->d_snglsnr_H + 8 * max_npeak;
+-    pklist->d_cohsnr     = pklist->d_snglsnr_H + 9 * max_npeak;
+-    pklist->d_nullsnr    = pklist->d_snglsnr_H + 10 * max_npeak;
+-    pklist->d_cmbchisq   = pklist->d_snglsnr_H + 11 * max_npeak;
+-
+-    pklist->d_snglsnr_bg_H = pklist->d_snglsnr_H + 12 * max_npeak;
+-    pklist->d_snglsnr_bg_L =
+-      pklist->d_snglsnr_H + (12 + hist_trials) * max_npeak;
+-    pklist->d_snglsnr_bg_V =
+-      pklist->d_snglsnr_H + (12 + 2 * hist_trials) * max_npeak;
+-    pklist->d_coaphase_bg_H =
+-      pklist->d_snglsnr_H + (12 + 3 * hist_trials) * max_npeak;
+-    pklist->d_coaphase_bg_L =
+-      pklist->d_snglsnr_H + (12 + 4 * hist_trials) * max_npeak;
+-    pklist->d_coaphase_bg_V =
+-      pklist->d_snglsnr_H + (12 + 5 * hist_trials) * max_npeak;
+-    pklist->d_chisq_bg_H =
+-      pklist->d_snglsnr_H + (12 + 6 * hist_trials) * max_npeak;
+-    pklist->d_chisq_bg_L =
+-      pklist->d_snglsnr_H + (12 + 7 * hist_trials) * max_npeak;
+-    pklist->d_chisq_bg_V =
+-      pklist->d_snglsnr_H + (12 + 8 * hist_trials) * max_npeak;
++
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        pklist->d_snglsnr[i] = pklist->d_snglsnr[0] + (max_npeak * i);
++        pklist->d_coaphase[i] =
++          pklist->d_snglsnr[0] + (max_npeak * (i + MAX_NIFO));
++        pklist->d_chisq[i] =
++          pklist->d_snglsnr[0] + (max_npeak * (i + 2 * MAX_NIFO));
++
++        pklist->d_snglsnr_bg[i] =
++          pklist->d_snglsnr[0]
++          + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (i + 0 * MAX_NIFO))));
++        pklist->d_coaphase_bg[i] =
++          pklist->d_snglsnr[0]
++          + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (i + 1 * MAX_NIFO))));
++        pklist->d_chisq_bg[i] =
++          pklist->d_snglsnr[0]
++          + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (i + 2 * MAX_NIFO))));
++    }
++    pklist->d_cohsnr   = pklist->d_snglsnr[0] + (3 * MAX_NIFO + 0) * max_npeak;
++    pklist->d_nullsnr  = pklist->d_snglsnr[0] + (3 * MAX_NIFO + 1) * max_npeak;
++    pklist->d_cmbchisq = pklist->d_snglsnr[0] + (3 * MAX_NIFO + 2) * max_npeak;
++
+     pklist->d_cohsnr_bg =
+-      pklist->d_snglsnr_H + (12 + 9 * hist_trials) * max_npeak;
++      pklist->d_snglsnr[0]
++      + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (0 + 3 * MAX_NIFO))));
++
+     pklist->d_nullsnr_bg =
+-      pklist->d_snglsnr_H + (12 + 10 * hist_trials) * max_npeak;
++      pklist->d_snglsnr[0]
++      + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (1 + 3 * MAX_NIFO))));
+     pklist->d_cmbchisq_bg =
+-      pklist->d_snglsnr_H + (12 + 11 * hist_trials) * max_npeak;
++      pklist->d_snglsnr[0]
++      + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (2 + 3 * MAX_NIFO))));
+ 
+     /* create host space for peak list for int-type variables */
+-    // pklist->npeak = (int *)malloc(sizeof(int) * peak_intlen);
+     CUDA_CHECK(
+       cudaMallocHost((void **)&(pklist->npeak), sizeof(int) * peak_intlen));
+     memset(pklist->npeak, 0, sizeof(int) * peak_intlen);
+@@ -242,49 +278,46 @@ PeakList *create_peak_list(PostcohState *state, cudaStream_t stream) {
+     pklist->tmplt_idx  = pklist->npeak + 1 + 2 * max_npeak;
+     pklist->pix_idx    = pklist->npeak + 1 + 3 * max_npeak;
+     pklist->pix_idx_bg = pklist->npeak + 1 + 4 * max_npeak;
+-    pklist->ntoff_H    = pklist->npeak + 1 + (4 + hist_trials) * max_npeak;
+-    pklist->ntoff_L    = pklist->npeak + 1 + (5 + hist_trials) * max_npeak;
+-    pklist->ntoff_V    = pklist->npeak + 1 + (6 + hist_trials) * max_npeak;
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        pklist->ntoff[i] =
++          pklist->npeak + 1 + (4 + hist_trials + i) * max_npeak;
++    }
+ 
+     /* create host space for peak list for float-type variables */
+-    // pklist->snglsnr_L = (float *)malloc(sizeof(float) * peak_floatlen);
+-    CUDA_CHECK(cudaMallocHost((void **)&(pklist->snglsnr_H),
++    CUDA_CHECK(cudaMallocHost((void **)&(pklist->snglsnr[0]),
+                               sizeof(float) * peak_floatlen));
+-    memset(pklist->snglsnr_H, 0, sizeof(float) * peak_floatlen);
+-    pklist->snglsnr_L  = pklist->snglsnr_H + max_npeak;
+-    pklist->snglsnr_V  = pklist->snglsnr_H + 2 * max_npeak;
+-    pklist->coaphase_H = pklist->snglsnr_H + 3 * max_npeak;
+-    pklist->coaphase_L = pklist->snglsnr_H + 4 * max_npeak;
+-    pklist->coaphase_V = pklist->snglsnr_H + 5 * max_npeak;
+-    pklist->chisq_H    = pklist->snglsnr_H + 6 * max_npeak;
+-    pklist->chisq_L    = pklist->snglsnr_H + 7 * max_npeak;
+-    pklist->chisq_V    = pklist->snglsnr_H + 8 * max_npeak;
+-    pklist->cohsnr     = pklist->snglsnr_H + 9 * max_npeak;
+-    pklist->nullsnr    = pklist->snglsnr_H + 10 * max_npeak;
+-    pklist->cmbchisq   = pklist->snglsnr_H + 11 * max_npeak;
+-    //
+-    pklist->snglsnr_bg_H = pklist->snglsnr_H + 12 * max_npeak;
+-    pklist->snglsnr_bg_L = pklist->snglsnr_H + (12 + hist_trials) * max_npeak;
+-    pklist->snglsnr_bg_V =
+-      pklist->snglsnr_H + (12 + 2 * hist_trials) * max_npeak;
+-    pklist->coaphase_bg_H =
+-      pklist->snglsnr_H + (12 + 3 * hist_trials) * max_npeak;
+-    pklist->coaphase_bg_L =
+-      pklist->snglsnr_H + (12 + 4 * hist_trials) * max_npeak;
+-    pklist->coaphase_bg_V =
+-      pklist->snglsnr_H + (12 + 5 * hist_trials) * max_npeak;
+-    pklist->chisq_bg_H = pklist->snglsnr_H + (12 + 6 * hist_trials) * max_npeak;
+-    pklist->chisq_bg_L = pklist->snglsnr_H + (12 + 7 * hist_trials) * max_npeak;
+-    pklist->chisq_bg_V = pklist->snglsnr_H + (12 + 8 * hist_trials) * max_npeak;
+-    pklist->cohsnr_bg  = pklist->snglsnr_H + (12 + 9 * hist_trials) * max_npeak;
++    memset(pklist->snglsnr[0], 0, sizeof(float) * peak_floatlen);
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        pklist->snglsnr[i]  = pklist->snglsnr[0] + (max_npeak * i);
++        pklist->coaphase[i] = pklist->snglsnr[0] + (max_npeak * (i + MAX_NIFO));
++        pklist->chisq[i] =
++          pklist->snglsnr[0] + (max_npeak * (i + 2 * MAX_NIFO));
++
++        pklist->snglsnr_bg[i] =
++          pklist->snglsnr[0]
++          + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (i + 0 * MAX_NIFO))));
++        pklist->coaphase_bg[i] =
++          pklist->snglsnr[0]
++          + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (i + 1 * MAX_NIFO))));
++        pklist->chisq_bg[i] =
++          pklist->snglsnr[0]
++          + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (i + 2 * MAX_NIFO))));
++    }
++    pklist->cohsnr   = pklist->snglsnr[0] + (3 * MAX_NIFO + 0) * max_npeak;
++    pklist->nullsnr  = pklist->snglsnr[0] + (3 * MAX_NIFO + 1) * max_npeak;
++    pklist->cmbchisq = pklist->snglsnr[0] + (3 * MAX_NIFO + 2) * max_npeak;
++
++    pklist->cohsnr_bg =
++      pklist->snglsnr[0]
++      + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (0 + 3 * MAX_NIFO))));
++
+     pklist->nullsnr_bg =
+-      pklist->snglsnr_H + (12 + 10 * hist_trials) * max_npeak;
++      pklist->snglsnr[0]
++      + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (1 + 3 * MAX_NIFO))));
+     pklist->cmbchisq_bg =
+-      pklist->snglsnr_H + (12 + 11 * hist_trials) * max_npeak;
++      pklist->snglsnr[0]
++      + (max_npeak * ((4 * MAX_NIFO) + (hist_trials * (2 + 3 * MAX_NIFO))));
+ 
+-    //		printf("set peak addr %p, d_npeak addr %p\n", pklist,
+-    //pklist->d_npeak); printf("hist trials %d, peak_intlen %d, peak_floatlen
+-    // %d\n", hist_trials, peak_intlen, peak_floatlen);
+     /* temporary struct to store tmplt max in one max_npeak data */
+     CUDA_CHECK(cudaMalloc((void **)&(pklist->d_peak_tmplt),
+                           sizeof(float) * state->ntmplt));
+@@ -820,12 +853,24 @@ static void autocorr_destroy(PostcohState *state) {
+ void peak_list_destroy(PeakList *pklist) {
+ 
+     CUDA_CHECK(cudaFree(pklist->d_npeak));
+-    CUDA_CHECK(cudaFree(pklist->d_snglsnr_L));
++    CUDA_CHECK(cudaFree(pklist->d_snglsnr[0]));
++    CUDA_CHECK(cudaFree(pklist->d_snglsnr));
++    CUDA_CHECK(cudaFree(pklist->d_coaphase));
++    CUDA_CHECK(cudaFree(pklist->d_chisq));
++    CUDA_CHECK(cudaFree(pklist->d_snglsnr_bg));
++    CUDA_CHECK(cudaFree(pklist->d_coaphase_bg));
++    CUDA_CHECK(cudaFree(pklist->d_chisq_bg));
+     CUDA_CHECK(cudaFree(pklist->d_peak_tmplt));
+     CUDA_CHECK(cudaFree(pklist->d_cohsnr_skymap));
+ 
+     CUDA_CHECK(cudaFreeHost(pklist->npeak));
+-    CUDA_CHECK(cudaFreeHost(pklist->snglsnr_L));
++    CUDA_CHECK(cudaFreeHost(pklist->snglsnr[0]));
++    CUDA_CHECK(cudaFreeHost(pklist->snglsnr));
++    CUDA_CHECK(cudaFreeHost(pklist->coaphase));
++    CUDA_CHECK(cudaFreeHost(pklist->chisq));
++    CUDA_CHECK(cudaFreeHost(pklist->snglsnr_bg));
++    CUDA_CHECK(cudaFreeHost(pklist->coaphase_bg));
++    CUDA_CHECK(cudaFreeHost(pklist->chisq_bg));
+     CUDA_CHECK(cudaFreeHost(pklist->cohsnr_skymap));
+ }
+ 
+diff --git a/gstlal-spiir/gst/cuda/postcoh/postcoh_utils.h b/gstlal-spiir/gst/cuda/postcoh/postcoh_utils.h
+index d9837f1c..41e2bdd9 100644
+--- a/gstlal-spiir/gst/cuda/postcoh/postcoh_utils.h
++++ b/gstlal-spiir/gst/cuda/postcoh/postcoh_utils.h
+@@ -15,6 +15,8 @@ void cuda_device_print(int deviceCount);
+ 
+ PeakList *create_peak_list(PostcohState *state, cudaStream_t stream);
+ 
++void get_write_ifo_mapping(char *ifo_combo, int nifo, int *write_ifo_mapping);
++
+ void cuda_postcoh_map_from_xml(char *fname,
+                                PostcohState *state,
+                                cudaStream_t stream);
+diff --git a/gstlal-spiir/gst/cuda/postcoh/postcohtable_utils.c b/gstlal-spiir/gst/cuda/postcoh/postcohtable_utils.c
+index db53a829..87ecf159 100644
+--- a/gstlal-spiir/gst/cuda/postcoh/postcohtable_utils.c
++++ b/gstlal-spiir/gst/cuda/postcoh/postcohtable_utils.c
+@@ -26,136 +26,148 @@ void postcohtable_init(XmlTable *table) {
+ 
+     table->delimiter = g_string_new(",");
+ 
+-    table->names = g_array_new(FALSE, FALSE, sizeof(GString));
++    table->names      = g_array_new(FALSE, FALSE, sizeof(GString));
++    table->type_names = g_array_new(FALSE, FALSE, sizeof(GString));
++
+     g_array_append_val(table->names, *g_string_new("postcoh:end_time"));
++    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+     g_array_append_val(table->names, *g_string_new("postcoh:end_time_ns"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:end_time_L"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:end_time_ns_L"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:end_time_H"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:end_time_ns_H"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:end_time_V"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:end_time_ns_V"));
++    g_array_append_val(table->type_names, *g_string_new("int_4s"));
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:end_time_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("int_4s"));
++        g_array_append_val(
++          table->names, *g_string_append(g_string_new("postcoh:end_time_ns_"),
++                                         IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("int_4s"));
++    }
+     g_array_append_val(table->names, *g_string_new("postcoh:is_background"));
++    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+     g_array_append_val(table->names, *g_string_new("postcoh:livetime"));
++    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+     g_array_append_val(table->names, *g_string_new("postcoh:ifos"));
++    g_array_append_val(table->type_names, *g_string_new("lstring"));
+     g_array_append_val(table->names, *g_string_new("postcoh:pivotal_ifo"));
++    g_array_append_val(table->type_names, *g_string_new("lstring"));
+     g_array_append_val(table->names, *g_string_new("postcoh:tmplt_idx"));
++    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+     g_array_append_val(table->names, *g_string_new("postcoh:pix_idx"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:snglsnr_L"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:snglsnr_H"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:snglsnr_V"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:coaphase_L"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:coaphase_H"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:coaphase_V"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:chisq_L"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:chisq_H"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:chisq_V"));
++    g_array_append_val(table->type_names, *g_string_new("int_4s"));
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:snglsnr_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_4"));
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:snglsnr_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_4"));
++    }
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:coaphase_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_4"));
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:coaphase_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_4"));
++    }
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:chisq_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_4"));
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:chisq_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_4"));
++    }
+     g_array_append_val(table->names, *g_string_new("postcoh:cohsnr"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
+     g_array_append_val(table->names, *g_string_new("postcoh:nullsnr"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
+     g_array_append_val(table->names, *g_string_new("postcoh:cmbchisq"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
+     g_array_append_val(table->names, *g_string_new("postcoh:spearman_pval"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
+     g_array_append_val(table->names, *g_string_new("postcoh:fap"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
+     g_array_append_val(table->names, *g_string_new("postcoh:far"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:far_l"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:far_h"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:far_v"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:far_sngl_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_4"));
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:far_sngl_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_4"));
++    }
+     g_array_append_val(table->names, *g_string_new("postcoh:far_2h"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
+     g_array_append_val(table->names, *g_string_new("postcoh:far_1d"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
+     g_array_append_val(table->names, *g_string_new("postcoh:far_1w"));
++    g_array_append_val(table->type_names, *g_string_new("real_4"));
+     g_array_append_val(table->names, *g_string_new("postcoh:skymap_fname"));
++    g_array_append_val(table->type_names, *g_string_new("lstring"));
+     g_array_append_val(table->names,
+                        *g_string_new("postcoh:template_duration"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:mchirp"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:mtotal"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:mass1"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:mass2"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:spin1x"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:spin1y"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:spin1z"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:spin2x"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:spin2y"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:spin2z"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:ra"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:dec"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:deff_L"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:deff_H"));
+-    g_array_append_val(table->names, *g_string_new("postcoh:deff_V"));
+-
+-    table->type_names = g_array_new(FALSE, FALSE, sizeof(GString));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("lstring"));
+-    g_array_append_val(table->type_names, *g_string_new("lstring"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("int_4s"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("real_4"));
+-    g_array_append_val(table->type_names, *g_string_new("lstring"));
+     g_array_append_val(table->type_names, *g_string_new("real_8"));
++    g_array_append_val(table->names, *g_string_new("postcoh:mchirp"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:mtotal"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:mass1"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:mass2"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:spin1x"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:spin1y"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:spin1z"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:spin2x"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:spin2y"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:spin2z"));
+     g_array_append_val(table->type_names, *g_string_new("real_4"));
++    g_array_append_val(table->names, *g_string_new("postcoh:ra"));
+     g_array_append_val(table->type_names, *g_string_new("real_8"));
++    g_array_append_val(table->names, *g_string_new("postcoh:dec"));
+     g_array_append_val(table->type_names, *g_string_new("real_8"));
+-    g_array_append_val(table->type_names, *g_string_new("real_8"));
+-    g_array_append_val(table->type_names, *g_string_new("real_8"));
+-    g_array_append_val(table->type_names, *g_string_new("real_8"));
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:deff_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_8"));
++        g_array_append_val(
++          table->names,
++          *g_string_append(g_string_new("postcoh:deff_"), IFOMap[i].name));
++        g_array_append_val(table->type_names, *g_string_new("real_8"));
++    }
+ }
+ 
+ void postcohtable_set_line(GString *line,
+                            PostcohInspiralTable *table,
+                            XmlTable *xtable) {
+-    g_string_append_printf(line, "%d%s", table->end_time_L.gpsSeconds,
+-                           xtable->delimiter->str); // for end_time_ns
+-    g_string_append_printf(line, "%d%s", table->end_time_L.gpsNanoSeconds,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%d%s", table->end_time_L.gpsSeconds,
++    g_string_append_printf(line, "%d%s", table->end_time.gpsSeconds,
+                            xtable->delimiter->str);
+-    g_string_append_printf(line, "%d%s", table->end_time_L.gpsNanoSeconds,
++    g_string_append_printf(line, "%d%s", table->end_time.gpsNanoSeconds,
+                            xtable->delimiter->str);
+-    g_string_append_printf(line, "%d%s", table->end_time_H.gpsSeconds,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%d%s", table->end_time_H.gpsNanoSeconds,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%d%s", table->end_time_V.gpsSeconds,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%d%s", table->end_time_V.gpsNanoSeconds,
+-                           xtable->delimiter->str);
+-
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_string_append_printf(line, "%d%s", table->end_time_sngl[i].gpsSeconds,
++                               xtable->delimiter->str);
++        g_string_append_printf(line, "%d%s",
++                               table->end_time_sngl[i].gpsNanoSeconds,
++                               xtable->delimiter->str);
++    }
+     g_string_append_printf(line, "%d%s", table->is_background,
+                            xtable->delimiter->str);
+     g_string_append_printf(line, "%d%s", table->livetime,
+@@ -167,24 +179,19 @@ void postcohtable_set_line(GString *line,
+                            xtable->delimiter->str);
+     g_string_append_printf(line, "%d%s", table->pix_idx,
+                            xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->snglsnr_L,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->snglsnr_H,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->snglsnr_V,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->coaphase_L,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->coaphase_H,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->coaphase_V,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->chisq_L,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->chisq_H,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->chisq_V,
+-                           xtable->delimiter->str);
++
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_string_append_printf(line, "%g%s", table->snglsnr[i],
++                               xtable->delimiter->str);
++    }
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_string_append_printf(line, "%g%s", table->coaphase[i],
++                               xtable->delimiter->str);
++    }
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_string_append_printf(line, "%g%s", table->chisq[i],
++                               xtable->delimiter->str);
++    }
+ 
+     g_string_append_printf(line, "%g%s", table->cohsnr, xtable->delimiter->str);
+     g_string_append_printf(line, "%g%s", table->nullsnr,
+@@ -195,9 +202,11 @@ void postcohtable_set_line(GString *line,
+                            xtable->delimiter->str);
+     g_string_append_printf(line, "%g%s", table->fap, xtable->delimiter->str);
+     g_string_append_printf(line, "%g%s", table->far, xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->far_l, xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->far_h, xtable->delimiter->str);
+-    g_string_append_printf(line, "%g%s", table->far_v, xtable->delimiter->str);
++
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_string_append_printf(line, "%g%s", table->far_sngl[i],
++                               xtable->delimiter->str);
++    }
+     g_string_append_printf(line, "%g%s", table->far_2h, xtable->delimiter->str);
+     g_string_append_printf(line, "%g%s", table->far_1d, xtable->delimiter->str);
+     g_string_append_printf(line, "%g%s", table->far_1w, xtable->delimiter->str);
+@@ -217,12 +226,10 @@ void postcohtable_set_line(GString *line,
+     g_string_append_printf(line, "%g%s", table->spin2z, xtable->delimiter->str);
+     g_string_append_printf(line, "%lg%s", table->ra, xtable->delimiter->str);
+     g_string_append_printf(line, "%lg%s", table->dec, xtable->delimiter->str);
+-    g_string_append_printf(line, "%lg%s", table->deff_L,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%lg%s", table->deff_H,
+-                           xtable->delimiter->str);
+-    g_string_append_printf(line, "%lg%s", table->deff_V,
+-                           xtable->delimiter->str);
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        g_string_append_printf(line, "%lg%s", table->deff[i],
++                               xtable->delimiter->str);
++    }
+ 
+     g_string_append(line, "\n");
+     // printf("%s", line->str);
+diff --git a/gstlal-spiir/gst/cuda/spiir/spiir_kernel.cu b/gstlal-spiir/gst/cuda/spiir/spiir_kernel.cu
+index 0c09d485..f84080f1 100644
+--- a/gstlal-spiir/gst/cuda/spiir/spiir_kernel.cu
++++ b/gstlal-spiir/gst/cuda/spiir/spiir_kernel.cu
+@@ -332,8 +332,8 @@ __global__ void cuda_iir_filter_kernel(COMPLEX8_F *cudaA1,
+         for (i = 0; i < step_points; i += nb) {
+             for (j = 0; j < nb; ++j) {
+                 // data = 0.01f;
+-                // data = tex1Dfetch(texRef, shift+i+j);		//use texture,
+-                // abandon now
++                // data = tex1Dfetch(texRef, shift+i+j);		//use
++                // texture, abandon now
+                 data              = cudaData[shift + i + j];
+                 fltrOutptReal[tx] = a1.re * previousSnr.re
+                                     - a1.im * previousSnr.im + b0.re * data;
+diff --git a/gstlal-spiir/include/pipe_macro.h b/gstlal-spiir/include/pipe_macro.h
+index b6e0fc9a..f3d82196 100644
+--- a/gstlal-spiir/include/pipe_macro.h
++++ b/gstlal-spiir/include/pipe_macro.h
+@@ -6,17 +6,20 @@
+ #define MAX_IFO_LEN 4
+ #endif
+ 
+-#define MAX_NIFO 3
+ typedef struct _IFOType {
+     const char *name;
+     int index;
+ } IFOType;
+ 
+-static const IFOType IFOMap[MAX_NIFO] = {
+-    { "H1", 0 }, // 1 << 0 = 1
+-    { "L1", 1 }, // 1 << 1 = 2
+-    { "V1", 2 }, // 1 << 2 = 4
+-};
++#define MAX_NIFO 3
++#ifdef __cplusplus
++constexpr
++#endif
++  static const IFOType IFOMap[MAX_NIFO] = {
++      { "H1", 0 }, // 1 << 0 = 1
++      { "L1", 1 }, // 1 << 1 = 2
++      { "V1", 2 }, // 1 << 2 = 4
++  };
+ #define MAX_IFO_COMBOS 7 // 2^3-1
+ // A combination is sum(1 << index) - 1
+ // This gives us some nice mathematical properties that we can use to check
+@@ -79,7 +82,6 @@ int get_icombo(char *ifos);
+ #define STATS_XML_WRITE_END   3
+ #define STATS_XML_WRITE_FULL  4
+ 
+-#define MAX(a, b)        (a > b ? a : b)
+ #define PNOISE_MIN_LIMIT -30
+ #define PSIG_MIN_LIMIT   -30
+ #define LR_MIN_LIMIT     -30
+diff --git a/gstlal-spiir/include/postcohtable.h b/gstlal-spiir/include/postcohtable.h
+index e7833c57..f101886b 100644
+--- a/gstlal-spiir/include/postcohtable.h
++++ b/gstlal-spiir/include/postcohtable.h
+@@ -34,9 +34,7 @@ typedef struct tagPostcohInspiralTable {
+     long process_id;
+     long event_id;
+     LIGOTimeGPS end_time;
+-    LIGOTimeGPS end_time_H;
+-    LIGOTimeGPS end_time_L;
+-    LIGOTimeGPS end_time_V;
++    LIGOTimeGPS end_time_sngl[MAX_NIFO];
+     INT4 is_background;
+     INT4 livetime;
+     CHAR ifos[MAX_ALLIFO_LEN];
+@@ -44,32 +42,18 @@ typedef struct tagPostcohInspiralTable {
+     INT4 tmplt_idx;
+     INT4 bankid;
+     INT4 pix_idx;
+-    REAL4 snglsnr_H;
+-    REAL4 snglsnr_L;
+-    REAL4 snglsnr_V;
+-    REAL4 coaphase_H;
+-    REAL4 coaphase_L;
+-    REAL4 coaphase_V;
+-    REAL4 chisq_H;
+-    REAL4 chisq_L;
+-    REAL4 chisq_V;
++    REAL4 snglsnr[MAX_NIFO];
++    REAL4 coaphase[MAX_NIFO];
++    REAL4 chisq[MAX_NIFO];
+     REAL4 cohsnr;
+     REAL4 nullsnr;
+     REAL4 cmbchisq;
+     REAL4 spearman_pval;
+     REAL4 fap;
+-    REAL4 far_h;
+-    REAL4 far_l;
+-    REAL4 far_v;
+-    REAL4 far_h_1w;
+-    REAL4 far_l_1w;
+-    REAL4 far_v_1w;
+-    REAL4 far_h_1d;
+-    REAL4 far_l_1d;
+-    REAL4 far_v_1d;
+-    REAL4 far_h_2h;
+-    REAL4 far_l_2h;
+-    REAL4 far_v_2h;
++    REAL4 far_sngl[MAX_NIFO];
++    REAL4 far_1w_sngl[MAX_NIFO];
++    REAL4 far_1d_sngl[MAX_NIFO];
++    REAL4 far_2h_sngl[MAX_NIFO];
+     REAL4 far;
+     REAL4 far_2h;
+     REAL4 far_1d;
+@@ -89,9 +73,7 @@ typedef struct tagPostcohInspiralTable {
+     REAL4 eta;
+     REAL8 ra;
+     REAL8 dec;
+-    REAL8 deff_H;
+-    REAL8 deff_L;
+-    REAL8 deff_V;
++    REAL8 deff[MAX_NIFO];
+     REAL8 rank;
+     REAL4 f_final;
+     LIGOTimeGPS epoch;
+diff --git a/gstlal-spiir/python/pipemodules/postcoh_finalsink.py b/gstlal-spiir/python/pipemodules/postcoh_finalsink.py
+index e01d9021..ec1d07e1 100644
+--- a/gstlal-spiir/python/pipemodules/postcoh_finalsink.py
++++ b/gstlal-spiir/python/pipemodules/postcoh_finalsink.py
+@@ -468,7 +468,8 @@ class FinalSink(object):
+         else:
+             self.gracedb_offline_annote = False
+         if GraceDb:
+-            self.gracedb_client = GraceDb(gracedb_service_url, reload_certificate=True)
++            self.gracedb_client = GraceDb(gracedb_service_url,
++                                          reload_certificate=True)
+ 
+         # keep a record of segments and is snapshotted
+         # our segments is determined by if incoming buf is GAP
+@@ -554,29 +555,20 @@ class FinalSink(object):
+         # single far veto for high-significance trigger
+         # add an upper limit for the chisq for uploaded event compared to the last line, hardcoded to have uploaded event with chisq < 3
+         ifo_active = [
+-            self.candidate.chisq_H != 0 and self.candidate.chisq_H < 3,
+-            self.candidate.chisq_L != 0 and self.candidate.chisq_L < 3,
+-            self.candidate.chisq_V != 0 and self.candidate.chisq_V < 3
++            chisq != 0 and chisq < 3 for chisq in self.candidate.chisq
+         ]
+         ifo_fars_ok = [
+-            self.candidate.far_h < self.singlefar_veto_thresh
+-            and self.candidate.far_h > 0.,
+-            self.candidate.far_l < self.singlefar_veto_thresh
+-            and self.candidate.far_l > 0.,
+-            self.candidate.far_v < self.singlefar_veto_thresh
+-            and self.candidate.far_v > 0.
+-        ]
+-        ifo_chisqs = [
+-            self.candidate.chisq_H, self.candidate.chisq_L,
+-            self.candidate.chisq_V
++            far < self.singlefar_veto_thresh and far > 0.
++            for far in self.candidate.far_sngl
+         ]
+         if self.candidate.far < self.superevent_thresh:
+             return sum([
+                 i for (i, v) in zip(ifo_fars_ok, ifo_active) if v
+             ]) >= 2 and all(
+                 (lambda x:
+-                 [i1 / i2 < self.chisq_ratio_thresh for i1 in x for i2 in x])(
+-                     [i for (i, v) in zip(ifo_chisqs, ifo_active) if v]))
++                 [i1 / i2 < self.chisq_ratio_thresh for i1 in x for i2 in x])([
++                     i for (i, v) in zip(self.candidate.chisq, ifo_active) if v
++                 ]))
+ 
+     def appsink_new_buffer(self, elem):
+         with self.lock:
+@@ -739,12 +731,11 @@ class FinalSink(object):
+     def __set_far(self, candidate):
+         candidate.far = (max(candidate.far_2h, candidate.far_1d,
+                              candidate.far_1w)) * self.far_factor
+-        candidate.far_h = (max(candidate.far_h_2h, candidate.far_h_1d,
+-                               candidate.far_h_1w)) * self.far_factor
+-        candidate.far_l = (max(candidate.far_l_2h, candidate.far_l_1d,
+-                               candidate.far_l_1w)) * self.far_factor
+-        candidate.far_v = (max(candidate.far_v_2h, candidate.far_v_1d,
+-                               candidate.far_v_1w)) * self.far_factor
++        candidate.far_sngl = [
++            (max(fars) * self.far_factor)
++            for fars in zip(candidate.far_2h_sngl, candidate.far_1d_sngl,
++                            candidate.far_1w_sngl)
++        ]
+ 
+     # def __lookback_far(self, candidate):
+     # FIXME: hard-code to check event that's < 5e-7
+diff --git a/gstlal-spiir/python/pipemodules/postcohtable/Makefile.am b/gstlal-spiir/python/pipemodules/postcohtable/Makefile.am
+index 7038ccb4..23df433d 100644
+--- a/gstlal-spiir/python/pipemodules/postcohtable/Makefile.am
++++ b/gstlal-spiir/python/pipemodules/postcohtable/Makefile.am
+@@ -17,7 +17,7 @@ postcohtable_PYTHON = \
+ postcohtable_LTLIBRARIES = _postcohtable.la
+ 
+ _postcohtable_la_SOURCES = _postcohtable.c
+-_postcohtable_la_CPPFLAGS = $(AM_CPPFLAGS) $(PYTHON_CPPFLAGS) -DMODULE_NAME="\"gstlal.pipemodules.postcohtable._postcohtable\""
++_postcohtable_la_CPPFLAGS = $(AM_CPPFLAGS) $(LAL_CFLAGS) $(GSL_CFLAGS) $(gstreamer_CFLAGS) $(GSTLAL_CFLAGS) $(ADD_CFLAGS) $(PYTHON_CPPFLAGS) -DMODULE_NAME="\"gstlal.pipemodules.postcohtable._postcohtable\"" -fno-strict-aliasing -fpermissive
+ _postcohtable_la_CFLAGS = $(AM_CFLAGS) $(LAL_CFLAGS) $(GSL_CFLAGS) $(gstreamer_CFLAGS) $(GSTLAL_CFLAGS) $(ADD_CFLAGS) -fno-strict-aliasing -DMODULE_NAME="\"gstlal.pipemodules.postcohtable._postcohtable\""
+ _postcohtable_la_LDFLAGS = $(AM_LDFLAGS) $(LAL_LIBS) $(GSL_LIBS) $(GSTLAL_LDFLAGS) $(PYTHON_LIBS) $(ADD_LIBS) -module -avoid-version
+ 
+diff --git a/gstlal-spiir/python/pipemodules/postcohtable/_postcohtable.c b/gstlal-spiir/python/pipemodules/postcohtable/_postcohtable.c
+index 5ec05962..6ce527a0 100644
+--- a/gstlal-spiir/python/pipemodules/postcohtable/_postcohtable.c
++++ b/gstlal-spiir/python/pipemodules/postcohtable/_postcohtable.c
+@@ -24,6 +24,7 @@
+  * ============================================================================
+  */
+ 
++#include <string.h>
+ #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+ 
+ #define PY_SSIZE_T_CLEAN
+@@ -31,6 +32,7 @@
+ #include <lal/TimeSeries.h>
+ #include <lal/Units.h>
+ #include <numpy/ndarrayobject.h>
++#include <pipe_macro.h>
+ #include <postcohtable.h>
+ #include <structmember.h>
+ 
+@@ -49,6 +51,15 @@
+ typedef struct {
+     PyObject_HEAD PostcohInspiralTable row;
+     COMPLEX8TimeSeries *snr;
++    PyObject *end_time_sngl;
++    PyObject *snglsnr;
++    PyObject *coaphase;
++    PyObject *chisq;
++    PyObject *far_sngl;
++    PyObject *far_1w_sngl;
++    PyObject *far_1d_sngl;
++    PyObject *far_2h_sngl;
++    PyObject *deff;
+ } gstlal_GSTLALPostcohInspiral;
+ 
+ // static PyObject *row_event_id_type = NULL;
+@@ -58,49 +69,14 @@ typedef struct {
+  * Member access
+  */
+ 
+-static struct PyMemberDef members[] = {
++static PyMemberDef members[] = {
++    // Not dependent on the number of detectors
+     { "end_time", T_INT,
+       offsetof(gstlal_GSTLALPostcohInspiral, row.end_time.gpsSeconds), 0,
+       "end_time" },
+     { "end_time_ns", T_INT,
+       offsetof(gstlal_GSTLALPostcohInspiral, row.end_time.gpsNanoSeconds), 0,
+       "end_time_ns" },
+-    { "end_time_L", T_INT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.end_time_L.gpsSeconds), 0,
+-      "end_time_L" },
+-    { "end_time_ns_L", T_INT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.end_time_L.gpsNanoSeconds), 0,
+-      "end_time_ns_L" },
+-    { "end_time_H", T_INT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.end_time_H.gpsSeconds), 0,
+-      "end_time_H" },
+-    { "end_time_ns_H", T_INT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.end_time_H.gpsNanoSeconds), 0,
+-      "end_time_ns_H" },
+-    { "end_time_V", T_INT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.end_time_V.gpsSeconds), 0,
+-      "end_time_V" },
+-    { "end_time_ns_V", T_INT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.end_time_V.gpsNanoSeconds), 0,
+-      "end_time_ns_V" },
+-    { "snglsnr_L", T_FLOAT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.snglsnr_L), 0, "snglsnr_L" },
+-    { "snglsnr_H", T_FLOAT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.snglsnr_H), 0, "snglsnr_H" },
+-    { "snglsnr_V", T_FLOAT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.snglsnr_V), 0, "snglsnr_V" },
+-    { "coaphase_L", T_FLOAT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.coaphase_L), 0, "coaphase_L" },
+-    { "coaphase_H", T_FLOAT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.coaphase_H), 0, "coaphase_H" },
+-    { "coaphase_V", T_FLOAT,
+-      offsetof(gstlal_GSTLALPostcohInspiral, row.coaphase_V), 0, "coaphase_V" },
+-    { "chisq_L", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.chisq_L),
+-      0, "chisq_L" },
+-    { "chisq_H", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.chisq_H),
+-      0, "chisq_H" },
+-    { "chisq_V", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.chisq_V),
+-      0, "chisq_V" },
+     { "is_background", T_INT,
+       offsetof(gstlal_GSTLALPostcohInspiral, row.is_background), 0,
+       "is_background" },
+@@ -131,30 +107,6 @@ static struct PyMemberDef members[] = {
+       "far_1w" },
+     { "far", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far), 0,
+       "far" },
+-    { "far_h", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_h), 0,
+-      "far_h" },
+-    { "far_l", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_l), 0,
+-      "far_l" },
+-    { "far_v", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_v), 0,
+-      "far_v" },
+-    { "far_h_1w", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_h_1w),
+-      0, "far_h_1w" },
+-    { "far_l_1w", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_l_1w),
+-      0, "far_l_1w" },
+-    { "far_v_1w", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_v_1w),
+-      0, "far_v_1w" },
+-    { "far_h_1d", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_h_1d),
+-      0, "far_h_1d" },
+-    { "far_l_1d", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_l_1d),
+-      0, "far_l_1d" },
+-    { "far_v_1d", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_v_1d),
+-      0, "far_v_1d" },
+-    { "far_h_2h", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_h_2h),
+-      0, "far_h_2h" },
+-    { "far_l_2h", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_l_2h),
+-      0, "far_l_2h" },
+-    { "far_v_2h", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.far_v_2h),
+-      0, "far_v_2h" },
+     { "rank", T_DOUBLE, offsetof(gstlal_GSTLALPostcohInspiral, row.rank), 0,
+       "rank" },
+     { "template_duration", T_DOUBLE,
+@@ -185,12 +137,6 @@ static struct PyMemberDef members[] = {
+     { "ra", T_DOUBLE, offsetof(gstlal_GSTLALPostcohInspiral, row.ra), 0, "ra" },
+     { "dec", T_DOUBLE, offsetof(gstlal_GSTLALPostcohInspiral, row.dec), 0,
+       "dec" },
+-    { "deff_L", T_DOUBLE, offsetof(gstlal_GSTLALPostcohInspiral, row.deff_L), 0,
+-      "deff_L" },
+-    { "deff_H", T_DOUBLE, offsetof(gstlal_GSTLALPostcohInspiral, row.deff_H), 0,
+-      "deff_H" },
+-    { "deff_V", T_DOUBLE, offsetof(gstlal_GSTLALPostcohInspiral, row.deff_V), 0,
+-      "deff_V" },
+     { "f_final", T_FLOAT, offsetof(gstlal_GSTLALPostcohInspiral, row.f_final),
+       0, "f_final" },
+     { "_process_id", T_LONG,
+@@ -198,9 +144,28 @@ static struct PyMemberDef members[] = {
+       "process_id (long)" },
+     { "_event_id", T_LONG, offsetof(gstlal_GSTLALPostcohInspiral, row.event_id),
+       0, "event_id (long)" },
+-    {
+-      NULL,
+-    }
++
++    // Things that are done single detector are ndarrays
++    { "end_time_sngl", T_OBJECT_EX,
++      offsetof(gstlal_GSTLALPostcohInspiral, end_time_sngl), 0,
++      "end_time_sngl" },
++    { "snglsnr", T_OBJECT_EX, offsetof(gstlal_GSTLALPostcohInspiral, snglsnr),
++      0, "snglsnr" },
++    { "coaphase", T_OBJECT_EX, offsetof(gstlal_GSTLALPostcohInspiral, coaphase),
++      0, "coaphase" },
++    { "chisq", T_OBJECT_EX, offsetof(gstlal_GSTLALPostcohInspiral, chisq), 0,
++      "chisq" },
++    { "far_sngl", T_OBJECT_EX, offsetof(gstlal_GSTLALPostcohInspiral, far_sngl),
++      0, "far_sngl" },
++    { "far_1w_sngl", T_OBJECT_EX,
++      offsetof(gstlal_GSTLALPostcohInspiral, far_1w_sngl), 0, "far_1w_sngl" },
++    { "far_1d_sngl", T_OBJECT_EX,
++      offsetof(gstlal_GSTLALPostcohInspiral, far_1d_sngl), 0, "far_1d_sngl" },
++    { "far_2h_sngl", T_OBJECT_EX,
++      offsetof(gstlal_GSTLALPostcohInspiral, far_2h_sngl), 0, "far_2h_sngl" },
++    { "deff", T_OBJECT_EX, offsetof(gstlal_GSTLALPostcohInspiral, deff), 0,
++      "deff" },
++    { NULL },
+ };
+ 
+ struct pylal_inline_string_description {
+@@ -210,7 +175,7 @@ struct pylal_inline_string_description {
+ 
+ static PyObject *pylal_inline_string_get(PyObject *obj, void *data) {
+     const struct pylal_inline_string_description *desc = data;
+-    char *s = (void *)obj + desc->offset;
++    char *s = (char *)obj + desc->offset;
+ 
+     if ((ssize_t)strlen(s) >= desc->length) {
+         /* something's wrong, obj probably isn't a valid address */
+@@ -222,7 +187,7 @@ static PyObject *pylal_inline_string_get(PyObject *obj, void *data) {
+ static int pylal_inline_string_set(PyObject *obj, PyObject *val, void *data) {
+     const struct pylal_inline_string_description *desc = data;
+     char *v                                            = PyString_AsString(val);
+-    char *s = (void *)obj + desc->offset;
++    char *s = (char *)obj + desc->offset;
+ 
+     if (!v) return -1;
+     if ((ssize_t)strlen(v) >= desc->length) {
+@@ -238,7 +203,7 @@ static int pylal_inline_string_set(PyObject *obj, PyObject *val, void *data) {
+ 
+ static PyObject *snr_component_get(PyObject *obj, void *data) {
+     COMPLEX8TimeSeries *snr = ((gstlal_GSTLALPostcohInspiral *)obj)->snr;
+-    const char *name        = data;
++    const char *name        = (const char *)data;
+ 
+     if (!snr) {
+         PyErr_SetString(PyExc_ValueError, "no snr time series available");
+@@ -274,7 +239,8 @@ static PyObject *snr_component_get(PyObject *obj, void *data) {
+     return NULL;
+ }
+ 
+-static struct PyGetSetDef getset[] = {
++#define SINGLE 11
++static struct PyGetSetDef getset[SINGLE + 10 * MAX_NIFO + 1] = {
+     { "ifos", pylal_inline_string_get, pylal_inline_string_set, "ifos",
+       &(struct pylal_inline_string_description) {
+         offsetof(gstlal_GSTLALPostcohInspiral, row.ifos), MAX_ALLIFO_LEN } },
+@@ -301,11 +267,215 @@ static struct PyGetSetDef getset[] = {
+       "_snr_data_length" },
+     { "_snr_data", snr_component_get, NULL, ".snr.data", "_snr_data" },
+ 
+-    {
+-      NULL,
+-    }
++    { NULL }
+ };
+ 
++struct lal_array {
++    Py_ssize_t offset;
++    Py_ssize_t index;
++};
++
++static PyObject *pylal_double_array_get(PyObject *obj, void *data) {
++    const struct lal_array *desc = data;
++    double *d = (double *)((char *)obj + desc->offset) + desc->index;
++    if (!d) {
++        PyErr_Format(PyExc_ValueError, "float doesn't exist!");
++        return NULL;
++    }
++    return PyFloat_FromDouble(*d);
++}
++
++static int pylal_double_array_set(PyObject *obj, PyObject *val, void *data) {
++    const struct lal_array *desc = data;
++    double v                     = PyFloat_AsDouble(val);
++    double *d = (double *)((char *)obj + desc->offset) + desc->index;
++    if (!d) {
++        PyErr_Format(PyExc_ValueError, "float doesn't exist!");
++        return -1;
++    }
++    *d = v;
++    return 0;
++}
++
++static PyObject *pylal_float_array_get(PyObject *obj, void *data) {
++    const struct lal_array *desc = data;
++    float *f = (float *)((char *)obj + desc->offset) + desc->index;
++    if (!f) {
++        PyErr_Format(PyExc_ValueError, "float doesn't exist!");
++        return NULL;
++    }
++    return PyFloat_FromDouble((double)*f);
++}
++
++static int pylal_float_array_set(PyObject *obj, PyObject *val, void *data) {
++    const struct lal_array *desc = data;
++    double v                     = PyFloat_AsDouble(val);
++    float *f = (float *)((char *)obj + desc->offset) + desc->index;
++    if (!f) {
++        PyErr_Format(PyExc_ValueError, "float doesn't exist!");
++        return -1;
++    }
++    *f = (float)v;
++    return 0;
++}
++
++static PyObject *pylal_int_array_get(PyObject *obj, void *data) {
++    const struct lal_array *desc = data;
++    int *i = (int *)((char *)obj + desc->offset) + desc->index;
++    if (!i) {
++        PyErr_Format(PyExc_ValueError, "int doesn't exist!");
++        return NULL;
++    }
++    return PyInt_FromLong((long)*i);
++}
++
++static int pylal_int_array_set(PyObject *obj, PyObject *val, void *data) {
++    const struct lal_array *desc = data;
++    int v                        = (int)PyInt_AsLong(val);
++    int *i = (int *)((char *)obj + desc->offset) + desc->index;
++    if (!i) {
++        PyErr_Format(PyExc_ValueError, "float doesn't exist!");
++        return -1;
++    }
++    *i = (int)v;
++    return 0;
++}
++
++void prepare_getset() {
++    int offset = SINGLE;
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        char *var  = "chisq_";
++        char *name = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        struct lal_array *data =
++          (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset = offsetof(gstlal_GSTLALPostcohInspiral, row.chisq);
++        data->index  = i;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        PyGetSetDef def  = { name, pylal_float_array_get, pylal_float_array_set,
++                            name, data };
++        getset[offset++] = def;
++
++        var          = "snglsnr_";
++        name         = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data         = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset = offsetof(gstlal_GSTLALPostcohInspiral, row.snglsnr);
++        data->index  = i;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++
++        var          = "coaphase_";
++        name         = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data         = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset = offsetof(gstlal_GSTLALPostcohInspiral, row.coaphase);
++        data->index  = i;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++
++        var          = "far_sngl_";
++        name         = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data         = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset = offsetof(gstlal_GSTLALPostcohInspiral, row.far_sngl);
++        data->index  = i;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++
++        var          = "far_1d_sngl_";
++        name         = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data         = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset = offsetof(gstlal_GSTLALPostcohInspiral, row.far_1d_sngl);
++        data->index  = i;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++
++        var          = "far_1w_sngl_";
++        name         = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data         = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset = offsetof(gstlal_GSTLALPostcohInspiral, row.far_1w_sngl);
++        data->index  = i;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++
++        var          = "far_2h_sngl_";
++        name         = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data         = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset = offsetof(gstlal_GSTLALPostcohInspiral, row.far_2h_sngl);
++        data->index  = i;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++
++        var          = "deff_";
++        name         = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data         = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset = offsetof(gstlal_GSTLALPostcohInspiral, row.deff);
++        data->index  = i;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.get          = pylal_double_array_get;
++        def.set          = pylal_double_array_set;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++
++        var  = "end_time_sngl_";
++        name = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset =
++          offsetof(gstlal_GSTLALPostcohInspiral, row.end_time_sngl);
++        data->index = i * 2;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.get          = pylal_int_array_get;
++        def.set          = pylal_int_array_set;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++
++        var  = "end_time_ns_sngl_";
++        name = (char *)malloc(strlen(IFOMap[i].name) + strlen(var) + 1);
++        data = (struct lal_array *)malloc(sizeof(struct lal_array));
++        data->offset =
++          offsetof(gstlal_GSTLALPostcohInspiral, row.end_time_sngl);
++        data->index = i * 2 + 1;
++        strcpy(name, var);
++        strcat(name, IFOMap[i].name);
++        def.name         = name;
++        def.get          = pylal_int_array_get;
++        def.set          = pylal_int_array_set;
++        def.doc          = name;
++        def.closure      = data;
++        getset[offset++] = def;
++    }
++    PyGetSetDef def = { NULL };
++    getset[offset]  = def;
++}
++
+ // static Py_ssize_t getreadbuffer(PyObject *self, Py_ssize_t segment, void
+ // **ptrptr)
+ //{
+@@ -339,10 +509,10 @@ static struct PyGetSetDef getset[] = {
+  */
+ 
+ static PyObject *__new__(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+-    gstlal_GSTLALPostcohInspiral *new =
++    gstlal_GSTLALPostcohInspiral *ret =
+       (gstlal_GSTLALPostcohInspiral *)PyType_GenericNew(type, args, kwds);
+ 
+-    if (!new) return NULL;
++    if (!ret) return NULL;
+ 
+     /* link the event_id pointer in the row table structure
+      * to the event_id structure */
+@@ -352,13 +522,22 @@ static PyObject *__new__(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+     // new->event_id_i = 0;
+ 
+     /* done */
+-    return (PyObject *)new;
++    return (PyObject *)ret;
+ }
+ 
+ static void __del__(PyObject *self) {
+-    if (((gstlal_GSTLALPostcohInspiral *)self)->snr)
+-        XLALDestroyCOMPLEX8TimeSeries(
+-          ((gstlal_GSTLALPostcohInspiral *)self)->snr);
++    gstlal_GSTLALPostcohInspiral *typed_self =
++      (gstlal_GSTLALPostcohInspiral *)self;
++    if (typed_self->snr) XLALDestroyCOMPLEX8TimeSeries(typed_self->snr);
++    Py_DECREF(typed_self->end_time_sngl);
++    Py_DECREF(typed_self->snglsnr);
++    Py_DECREF(typed_self->coaphase);
++    Py_DECREF(typed_self->chisq);
++    Py_DECREF(typed_self->far_sngl);
++    Py_DECREF(typed_self->far_1w_sngl);
++    Py_DECREF(typed_self->far_1d_sngl);
++    Py_DECREF(typed_self->far_2h_sngl);
++    Py_DECREF(typed_self->deff);
+     Py_TYPE(self)->tp_free(self);
+ }
+ 
+@@ -366,6 +545,8 @@ static PyObject *from_buffer(PyObject *cls, PyObject *args) {
+     const char *data;
+     Py_ssize_t length;
+     PyObject *result;
++    npy_intp dims[1]          = { MAX_NIFO };
++    npy_intp end_time_dims[2] = { 2, MAX_NIFO };
+ 
+     if (!PyArg_ParseTuple(args, "s#", (const char **)&data, &length))
+         return NULL;
+@@ -397,6 +578,36 @@ static PyObject *from_buffer(PyObject *cls, PyObject *args) {
+          * gstlal_GSTLALPostcohInspiral item*/
+         ((gstlal_GSTLALPostcohInspiral *)item)->row =
+           (PostcohInspiralTable)*gstlal_postcohinspiral;
++
++        // Set the single-detector arrays
++        ((gstlal_GSTLALPostcohInspiral *)item)->end_time_sngl =
++          PyArray_SimpleNewFromData(1, end_time_dims, NPY_INT,
++                                    gstlal_postcohinspiral->end_time_sngl);
++        ((gstlal_GSTLALPostcohInspiral *)item)->snglsnr =
++          PyArray_SimpleNewFromData(1, dims, NPY_FLOAT,
++                                    gstlal_postcohinspiral->snglsnr);
++        ((gstlal_GSTLALPostcohInspiral *)item)->coaphase =
++          PyArray_SimpleNewFromData(1, dims, NPY_FLOAT,
++                                    gstlal_postcohinspiral->coaphase);
++        ((gstlal_GSTLALPostcohInspiral *)item)->chisq =
++          PyArray_SimpleNewFromData(1, dims, NPY_FLOAT,
++                                    gstlal_postcohinspiral->chisq);
++        ((gstlal_GSTLALPostcohInspiral *)item)->far_sngl =
++          PyArray_SimpleNewFromData(1, dims, NPY_FLOAT,
++                                    gstlal_postcohinspiral->far_sngl);
++        ((gstlal_GSTLALPostcohInspiral *)item)->far_1w_sngl =
++          PyArray_SimpleNewFromData(1, dims, NPY_FLOAT,
++                                    gstlal_postcohinspiral->far_1w_sngl);
++        ((gstlal_GSTLALPostcohInspiral *)item)->far_1d_sngl =
++          PyArray_SimpleNewFromData(1, dims, NPY_FLOAT,
++                                    gstlal_postcohinspiral->far_1d_sngl);
++        ((gstlal_GSTLALPostcohInspiral *)item)->far_2h_sngl =
++          PyArray_SimpleNewFromData(1, dims, NPY_FLOAT,
++                                    gstlal_postcohinspiral->far_2h_sngl);
++        ((gstlal_GSTLALPostcohInspiral *)item)->deff =
++          PyArray_SimpleNewFromData(1, dims, NPY_DOUBLE,
++                                    gstlal_postcohinspiral->deff);
++
+         /* duplicate the SNR time series if we have length? */
+         if (gstlal_postcohinspiral->snr_length) {
+             const size_t nbytes = sizeof(gstlal_postcohinspiral->snr[0])
+@@ -479,8 +690,20 @@ PyMODINIT_FUNC init_postcohtable(void) {
+     PyObject *module = Py_InitModule3(
+       MODULE_NAME, NULL, "Wrapper for LAL's PostcohInspiralTable type.");
+ 
++    prepare_getset();
+     import_array();
+ 
++    PyObject *ifo_map = PyList_New(MAX_NIFO);
++    Py_INCREF(ifo_map);
++    for (int i = 0; i < MAX_NIFO; ++i) {
++        PyObject *str =
++          PyString_FromStringAndSize(IFOMap[i].name, strlen(IFOMap[i].name));
++        assert(str);
++        Py_INCREF(str);
++        PyList_SetItem(ifo_map, i, str);
++    }
++    PyModule_AddObject(module, "ifo_map", ifo_map);
++
+     /* Cached ID types */
+     // process_id_type = pylal_get_ilwdchar_class("process", "process_id");
+     // row_event_id_type = pylal_get_ilwdchar_class("postcoh", "event_id");
+diff --git a/gstlal-spiir/python/pipemodules/postcohtable/postcoh_table_def.py b/gstlal-spiir/python/pipemodules/postcohtable/postcoh_table_def.py
+index e7d88349..45e7034f 100644
+--- a/gstlal-spiir/python/pipemodules/postcohtable/postcoh_table_def.py
++++ b/gstlal-spiir/python/pipemodules/postcohtable/postcoh_table_def.py
+@@ -4,84 +4,78 @@ from glue.ligolw import ilwd
+ from glue.ligolw import dbtables
+ from lal import LIGOTimeGPS
+ from xml.sax.xmlreader import AttributesImpl
++from itertools import chain
+ # so they can be inserted into a database
+ dbtables.ligolwtypes.ToPyType["ilwd:char"] = unicode
+ 
+ PostcohInspiralID = ilwd.get_ilwdchar_class(u"postcoh", u"event_id")
+ 
++import postcohtable
++
+ 
+ # need to be consistent with the table defined in postcohinspiral_table.h
+ class PostcohInspiralTable(table.Table):
+     tableName = "postcoh"
+-    validcolumns = {
+-        "process_id": "ilwd:char",
+-        "event_id": "ilwd:char",
+-        "end_time": "int_4s",
+-        "end_time_ns": "int_4s",
+-        "end_time_L": "int_4s",
+-        "end_time_ns_L": "int_4s",
+-        "end_time_H": "int_4s",
+-        "end_time_ns_H": "int_4s",
+-        "end_time_V": "int_4s",
+-        "end_time_ns_V": "int_4s",
+-        "snglsnr_L": "real_4",
+-        "snglsnr_H": "real_4",
+-        "snglsnr_V": "real_4",
+-        "coaphase_L": "real_4",
+-        "coaphase_H": "real_4",
+-        "coaphase_V": "real_4",
+-        "chisq_L": "real_4",
+-        "chisq_H": "real_4",
+-        "chisq_V": "real_4",
+-        "is_background": "int_4s",
+-        "livetime": "int_4s",
+-        "ifos": "lstring",
+-        "pivotal_ifo": "lstring",
+-        "tmplt_idx": "int_4s",
+-        "bankid": "int_4s",
+-        "pix_idx": "int_4s",
+-        "cohsnr": "real_4",
+-        "nullsnr": "real_4",
+-        "cmbchisq": "real_4",
+-        "spearman_pval": "real_4",
+-        "fap": "real_4",
+-        "far_h": "real_4",
+-        "far_l": "real_4",
+-        "far_v": "real_4",
+-        "far_h_1w": "real_4",
+-        "far_l_1w": "real_4",
+-        "far_v_1w": "real_4",
+-        "far_h_1d": "real_4",
+-        "far_l_1d": "real_4",
+-        "far_v_1d": "real_4",
+-        "far_h_2h": "real_4",
+-        "far_l_2h": "real_4",
+-        "far_v_2h": "real_4",
+-        "far": "real_4",
+-        "far_2h": "real_4",
+-        "far_1d": "real_4",
+-        "far_1w": "real_4",
+-        "skymap_fname": "lstring",
+-        "template_duration": "real_8",
+-        "mass1": "real_4",
+-        "mass2": "real_4",
+-        "mchirp": "real_4",
+-        "mtotal": "real_4",
+-        "spin1x": "real_4",
+-        "spin1y": "real_4",
+-        "spin1z": "real_4",
+-        "spin2x": "real_4",
+-        "spin2y": "real_4",
+-        "spin2z": "real_4",
+-        "eta": "real_4",
+-        "f_final": "real_4",
+-        "ra": "real_8",
+-        "dec": "real_8",
+-        "deff_L": "real_8",
+-        "deff_H": "real_8",
+-        "deff_V": "real_8",
+-        "rank": "real_8"
+-    }
++    validcolumns = dict(
++        chain(
++            [
++                ("process_id", "ilwd:char"),
++                ("event_id", "ilwd:char"),
++                ("end_time", "int_4s"),
++                ("end_time_ns", "int_4s"),
++                ("is_background", "int_4s"),
++                ("livetime", "int_4s"),
++                ("ifos", "lstring"),
++                ("pivotal_ifo", "lstring"),
++                ("tmplt_idx", "int_4s"),
++                ("bankid", "int_4s"),
++                ("pix_idx", "int_4s"),
++                ("cohsnr", "real_4"),
++                ("nullsnr", "real_4"),
++                ("cmbchisq", "real_4"),
++                ("spearman_pval", "real_4"),
++                ("fap", "real_4"),
++                ("far", "real_4"),
++                ("far_2h", "real_4"),
++                ("far_1d", "real_4"),
++                ("far_1w", "real_4"),
++                ("skymap_fname", "lstring"),
++                ("template_duration", "real_8"),
++                ("mass1", "real_4"),
++                ("mass2", "real_4"),
++                ("mchirp", "real_4"),
++                ("mtotal", "real_4"),
++                ("spin1x", "real_4"),
++                ("spin1y", "real_4"),
++                ("spin1z", "real_4"),
++                ("spin2x", "real_4"),
++                ("spin2y", "real_4"),
++                ("spin2z", "real_4"),
++                ("eta", "real_4"),
++                ("f_final", "real_4"),
++                ("ra", "real_8"),
++                ("dec", "real_8"),
++                ("rank", "real_8"),
++            ],
++            list(("deff_" + name, "real_8") for name in postcohtable.ifo_map),
++            list(("far_sngl_" + name, "real_4")
++                 for name in postcohtable.ifo_map),
++            list(("far_2h_sngl_" + name, "real_4")
++                 for name in postcohtable.ifo_map),
++            list(("far_1d_sngl_" + name, "real_4")
++                 for name in postcohtable.ifo_map),
++            list(("far_1w_sngl_" + name, "real_4")
++                 for name in postcohtable.ifo_map),
++            list(("snglsnr_" + name, "real_4")
++                 for name in postcohtable.ifo_map),
++            list(("coaphase_" + name, "real_4")
++                 for name in postcohtable.ifo_map),
++            list(("chisq_" + name, "real_4") for name in postcohtable.ifo_map),
++            list(("end_time_sngl_" + name, "int_4s")
++                 for name in postcohtable.ifo_map),
++            list(("end_time_ns_sngl_" + name, "int_4s")
++                 for name in postcohtable.ifo_map),
++        ))
+     constraints = "PRIMARY KEY (event_id)"
+     next_id = PostcohInspiralID(0)
+ 
+diff --git a/gstlal-spiir/python/pipemodules/postcohtable/postcohtable.py b/gstlal-spiir/python/pipemodules/postcohtable/postcohtable.py
+index d1a2c31b..b43183f3 100644
+--- a/gstlal-spiir/python/pipemodules/postcohtable/postcohtable.py
++++ b/gstlal-spiir/python/pipemodules/postcohtable/postcohtable.py
+@@ -21,7 +21,9 @@ from glue.ligolw import lsctables
+ import lal
+ from . import _postcohtable
+ 
+-__all__ = ["GSTLALPostcohInspiral"]
++__all__ = ["GSTLALPostcohInspiral", "ifo_map"]
++
++ifo_map = _postcohtable.ifo_map
+ 
+ 
+ class GSTLALPostcohInspiral(_postcohtable.GSTLALPostcohInspiral):
+-- 
+GitLab
+
