@@ -11,6 +11,7 @@ jobs:
         path: 
         - abstract
         - analysis
+        - dissertation
         - progress-report
         - proposal
         - seminar-presentation
