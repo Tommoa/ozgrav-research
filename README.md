@@ -1,5 +1,7 @@
 # OzGrav Research
 
+[![DOI](https://zenodo.org/badge/250756435.svg)](https://zenodo.org/badge/latestdoi/250756435)
+
 This repository is a listing of my time doing research for the OzGrav team at UWA.
 
 OzGrav researches gravitational waves, and attempts to use the data taken from various gravitation wave detectors (primarily LIGO in the US) to determine the direction of various waves so that their sources may be studied. The UWA team has developed a pipeline for analysis called SPIIR (summed parallel infinite impulse response) to provide low latency gravitational wave detection.
