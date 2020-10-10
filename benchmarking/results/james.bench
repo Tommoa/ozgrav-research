@@ -1,0 +1,25 @@
+CPU: AMD Ryzen 7 2700X Eight-Core Processor         
+	Threads: 16
+	Line size: 64B, Cache Size: 512KB
+Device 0: GeForce GTX 1080 Ti
+	Clock speed: 1670.5MHz
+	Compute capability: 6.1
+	Max threads per block: 1024
+	Compute units: 28
+Free (MB): 10331.9
+Total (MB): 11175.4
+Used (MB): 843.438
+
+      cpu_sequential:	9.20574
+        cpu_parallel:	2.44189	(-73.47427%)
+          thrust_max:	1.49976	(-83.70846%)
+               naive:	6.26052	(-31.99329%)
+            nobranch:	6.20092	(-32.64070%)
+          early_exit:	6.26243	(-31.97254%)
+              shared:	6.28891	(-31.68485%)
+              blocks:	0.30840	(-96.64991%)
+                warp:	6.16260	(-33.05691%)
+             chunked:	4.45619	(-51.59339%)
+        chunked_exit:	4.45515	(-51.60459%)
+      chunked_shared:	4.45920	(-51.56069%)
+      chunked_blocks:	0.25151	(-97.26795%)

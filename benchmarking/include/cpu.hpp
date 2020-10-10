@@ -31,7 +31,7 @@ void get_cpus() {
     }
 
     std::cerr << "CPU: " << cpu_model << std::endl;
-    std::cerr << "\t" << std::thread::hardware_concurrency() << " threads"
+    std::cerr << "\tThreads: " << std::thread::hardware_concurrency()
               << std::endl;
 
     uint32_t eax, ebx, ecx, edx;

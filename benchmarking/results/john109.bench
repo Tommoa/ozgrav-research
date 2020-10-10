@@ -1,0 +1,24 @@
+CPU: Intel(R) Xeon(R) Gold 6140 CPU @ 2.30GHz
+	Threads: 36
+	Line size: 64B, Cache Size: 256KB
+Device 0: Tesla V100-PCIE-32GB
+	Clock speed: 1380MHz
+	Compute capability: 7.0
+	Max threads per block: 1024
+	Compute units: 80
+Free (MB): 32063.2
+Total (MB): 32510.5
+Used (MB): 447.312
+
+      cpu_sequential:	76.16396
+          thrust_max:	0.44825	(-99.41147%)
+               naive:	11.51348	(-84.88330%)
+            nobranch:	11.99467	(-84.25151%)
+          early_exit:	11.51433	(-84.88218%)
+              shared:	11.46553	(-84.94626%)
+              blocks:	0.20823	(-99.72661%)
+                warp:	9.24525	(-87.86139%)
+             chunked:	5.30082	(-93.04025%)
+        chunked_exit:	5.30153	(-93.03932%)
+      chunked_shared:	5.29235	(-93.05138%)
+      chunked_blocks:	0.13262	(-99.82587%)

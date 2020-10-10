@@ -1,0 +1,24 @@
+CPU: Quad-Core AMD Opteron(tm) Processor 2376
+	Threads: 8
+	Line size: 64B, Cache Size: 512KB
+Device 0: GeForce GTX 1050 Ti
+	Clock speed: 1392MHz
+	Compute capability: 6.1
+	Max threads per block: 1024
+	Compute units: 6
+Free (MB): 431.938
+Total (MB): 4040.06
+Used (MB): 3608.12
+
+      cpu_sequential:	70.73506
+          thrust_max:	2.36339	(-96.65881%)
+               naive:	10.10683	(-85.71171%)
+            nobranch:	10.09560	(-85.72759%)
+          early_exit:	10.25477	(-85.50257%)
+              shared:	10.44865	(-85.22847%)
+              blocks:	2.23503	(-96.84028%)
+                warp:	10.61631	(-84.99145%)
+             chunked:	8.41569	(-88.10253%)
+        chunked_exit:	8.34456	(-88.20308%)
+      chunked_shared:	8.71834	(-87.67466%)
+      chunked_blocks:	1.45611	(-97.94147%)

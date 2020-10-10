@@ -1,0 +1,24 @@
+CPU: Intel(R) Xeon(R) CPU E5-2650 v4 @ 2.20GHz
+	Threads: 48
+	Line size: 64B, Cache Size: 256KB
+Device 0: Tesla V100-PCIE-16GB
+	Clock speed: 1380MHz
+	Compute capability: 7.0
+	Max threads per block: 1024
+	Compute units: 80
+Free (MB): 13476.5
+Total (MB): 16160.5
+Used (MB): 2684
+
+      cpu_sequential:	28.80590
+          thrust_max:	0.70555	(-97.55066%)
+               naive:	10.20038	(-64.58927%)
+            nobranch:	10.76815	(-62.61826%)
+          early_exit:	10.33482	(-64.12258%)
+              shared:	10.32406	(-64.15992%)
+              blocks:	0.18758	(-99.34883%)
+                warp:	9.25269	(-67.87920%)
+             chunked:	5.08006	(-82.36453%)
+        chunked_exit:	5.07318	(-82.38839%)
+      chunked_shared:	5.06772	(-82.40735%)
+      chunked_blocks:	0.13287	(-99.53875%)
