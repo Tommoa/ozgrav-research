@@ -12,7 +12,10 @@
 \usepackage{amsmath}
 \usepackage[yyyymmdd]{datetime}
 \usepackage{longtable}
+\usepackage{graphicx}
 \usepackage[table, xcdraw]{xcolor}
+\usepackage{pgfplots}
+\usepackage{tikz}
 \usepackage[
     backend=bibtex,
     style=numeric,
@@ -29,6 +32,9 @@
     {\normalfont\normalsize\bfseries}}
 \makeatother
 
+\pgfplotsset{compat=1.16}
+\usetikzlibrary{positioning}
+
 \onehalfspacing
 
 \pagestyle{fancy}
@@ -44,7 +50,7 @@
 \title{\normalsize \textsc{Masters Dissertation}
         \\ [1.5cm]
         \HRule{0.5pt} \\
-        \LARGE \textbf{\uppercase{Implementation of N-detectors in a gravitational wave detection pipeline}}
+        \LARGE \textbf{\uppercase{Implementation of \(N\)-detectors in a gravitational wave detection pipeline}}
         \HRule{2pt} \\ [0.5cm]
         \normalsize \date{\today} \vspace*{2\baselineskip}}
 
@@ -89,6 +95,15 @@ The SPIIR pipeline uses GStreamer, a library for composing, filtering and moving
 After receiving data from the detectors, the pipeline performs data conditioning and data whitening, followed by the usage of the IIR filters.
 The data is then combined for post-processing, where events are given sky localization and then inserted into the LIGO event database \cite{SPIIRGPU2018}.
 
+The structure of the SPIIR pipeline can be seen in figure \ref{fig:spiir_structure}.
+
+\begin{figure}
+    \label{fig:spiir_structure}
+    \centering
+    \includegraphics[scale=0.18]{../seminar-presentation/online_xdet.jpg}
+    \caption{The structure of the SPIIR pipeline}
+\end{figure}
+
 \subsection{Research Aims} \label{sec:introduction:aims}
 
 At the time of the start of this research, the SPIIR pipeline supported the use of two or three detectors for gravitational wave detection \textemdash{} the two American LIGO detectors and the Italian Virgo detector \textemdash{} although additional interferometers are likely to be introduced soon.
@@ -97,9 +112,21 @@ This presents several issues with the existing pipeline design.
 As with many of the other gravitational wave detection pipelines, providing support for additional detectors is a significant undertaking for the development team, with many hours of work and testing that need to be completed.
 As the number of available interferometers continues to grow, development work that could be spent on improving the optimisation, precision, or accuracy of the pipeline would instead have to be spent allowing for those detectors to be used.
 
+Thus, this dissertation aims to layout the design and implementation work done to provide the SPIIR pipeline with the ability to support any number of detectors (\(N\)-detectors).
+\\
+
+Section \ref{sec:lit_review} shall explore the existing literature on the implementation of \(N\)-detectors in other gravitational wave detection pipelines, in addition to exploring CUDA and complexity analysis, two tools that will be used in the analysis of the final design.
+Section \ref{sec:design_process} will look at the existing pipeline structure and its deficencies for implementing \(N\)-detectors.
+It will also determine any constraints a design for implementing \(N\)-detectors would have, and will provide a framework for evaluating the success of the resulting design.
+The final design will be presented in section \ref{sec:final_design}, and will explore the implementation details of the design and how it interacts with the existing programming interface that SPIIR provides.
+A discussion about the implications of this design will be done in section \ref{sec:discuss}, with additional research on those implications being presented there.
+Finally, section \ref{sec:further_work} will provide some suggestions for future research that can be based on this research.
+
 \section{Literature Review} \label{sec:lit_review}
 
-\subsection{N-detector work in other gravitational pipelines} \label{sec:lit_review:pipelines}
+\subsection{\(N\)-detector work in other gravitational wave detection pipelines} \label{sec:lit_review:pipelines}
+
+There are, of course, other gravitational wave detection pipelines that may also have to consider the issue of dealing with a growing number of detectors.
 
 \subsection{CUDA} \label{sec:lit_review:cuda}
 
@@ -127,6 +154,87 @@ It should be noted that the actual running time of a parallelised computation al
 This leads to work being denoted at \(T_1\) (the time taken to run on a single processor) and span being denoted as \(T_\infty\) (the time taken on an infinite number of processors).
 Another helpful metric is \textit{\textbf{speed-up}}, which shows how the algorithm scales with additional processors as \(S_P = \dfrac{T_1}{T_P}\).
 We can also then define \textit{\textbf{parallelism}} as the maximum possible speed-up on an infinite number of processors, and thus as \(p = \dfrac{T_1}{T_\infty}\).
+
+\begin{figure}
+    \label{fig:work}
+    \centering
+    \begin{tikzpicture}[
+        selectednode/.style={circle, text=black, draw=red!60, fill=red!5, very thick, minimum size=7mm},
+        unselectednode/.style={circle, text=black, draw=green!60, fill=green!5, very thick, minimum size=7mm},
+]
+        \node[selectednode] (leftuu) {\(\dfrac{N}{4}\)};
+        \node[selectednode] (leftul) [below=of leftuu] {\(\dfrac{N}{4}\)};
+        \node[selectednode] (leftlu) [below=of leftul] {\(\dfrac{N}{4}\)};
+        \node[selectednode] (leftll) [below=of leftlu] {\(\dfrac{N}{4}\)};
+        \node[selectednode] (centeru) [below right=of leftuu, above right=of leftul] {\(\dfrac{N}{2}\)};
+        \node[selectednode] (centerl) [below right=of leftlu, above right=of leftll] {\(\dfrac{N}{2}\)};
+        \node[selectednode] (right) [above right=of centerl, below right=of centeru] {\(N\)};
+
+        \node (luuu) [above left=of leftuu] {\(\cdots\)};
+        \node (luul) [below left=of leftuu, below=of luuu] {\(\cdots\)};
+        \node (lulu) [above left=of leftul, below=of luul] {\(\cdots\)};
+        \node (lull) [below left=of leftul, below=of lulu] {\(\cdots\)};
+        \node (lluu) [above left=of leftlu, below=of lull] {\(\cdots\)};
+        \node (llul) [below left=of leftlu, below=of lluu] {\(\cdots\)};
+        \node (lllu) [above left=of leftll, below=of llul] {\(\cdots\)};
+        \node (llll) [below left=of leftll, below=of lllu] {\(\cdots\)};
+        \draw[->] (luuu.east) -- (leftuu.west);
+        \draw[->] (luul.east) -- (leftuu.west);
+        \draw[->] (lulu.east) -- (leftul.west);
+        \draw[->] (lull.east) -- (leftul.west);
+        \draw[->] (lluu.east) -- (leftlu.west);
+        \draw[->] (llul.east) -- (leftlu.west);
+        \draw[->] (lllu.east) -- (leftll.west);
+        \draw[->] (llll.east) -- (leftll.west);
+        \draw[->] (leftuu.east) -- (centeru.west);
+        \draw[->] (leftul.east) -- (centeru.west);
+        \draw[->] (leftlu.east) -- (centerl.west);
+        \draw[->] (leftll.east) -- (centerl.west);
+        \draw[->] (centeru.east) -- (right.west);
+        \draw[->] (centerl.east) -- (right.west);
+    \end{tikzpicture}
+    \caption{An example of calculating work for a merge-sort like algorithm. Summed nodes are in red.}
+\end{figure}
+\begin{figure}
+    \label{fig:span}
+    \centering
+    \begin{tikzpicture}[
+        selectednode/.style={circle, text=black, draw=red!60, fill=red!5, very thick, minimum size=7mm},
+        unselectednode/.style={circle, text=black, draw=green!60, fill=green!5, very thick, minimum size=7mm},
+]
+        \node[selectednode] (leftuu) {\(\dfrac{N}{4}\)};
+        \node[unselectednode] (leftul) [below=of leftuu] {\(\dfrac{N}{4}\)};
+        \node[unselectednode] (leftlu) [below=of leftul] {\(\dfrac{N}{4}\)};
+        \node[unselectednode] (leftll) [below=of leftlu] {\(\dfrac{N}{4}\)};
+        \node[selectednode] (centeru) [below right=of leftuu, above right=of leftul] {\(\dfrac{N}{2}\)};
+        \node[unselectednode] (centerl) [below right=of leftlu, above right=of leftll] {\(\dfrac{N}{2}\)};
+        \node[selectednode] (right) [above right=of centerl, below right=of centeru] {\(N\)};
+
+        \node (luuu) [above left=of leftuu] {\(\cdots\)};
+        \node (luul) [below left=of leftuu, below=of luuu] {\(\cdots\)};
+        \node (lulu) [above left=of leftul, below=of luul] {\(\cdots\)};
+        \node (lull) [below left=of leftul, below=of lulu] {\(\cdots\)};
+        \node (lluu) [above left=of leftlu, below=of lull] {\(\cdots\)};
+        \node (llul) [below left=of leftlu, below=of lluu] {\(\cdots\)};
+        \node (lllu) [above left=of leftll, below=of llul] {\(\cdots\)};
+        \node (llll) [below left=of leftll, below=of lllu] {\(\cdots\)};
+        \draw[->] (luuu.east) -- (leftuu.west);
+        \draw[->] (luul.east) -- (leftuu.west);
+        \draw[->] (lulu.east) -- (leftul.west);
+        \draw[->] (lull.east) -- (leftul.west);
+        \draw[->] (lluu.east) -- (leftlu.west);
+        \draw[->] (llul.east) -- (leftlu.west);
+        \draw[->] (lllu.east) -- (leftll.west);
+        \draw[->] (llll.east) -- (leftll.west);
+        \draw[->] (leftuu.east) -- (centeru.west);
+        \draw[->] (leftul.east) -- (centeru.west);
+        \draw[->] (leftlu.east) -- (centerl.west);
+        \draw[->] (leftll.east) -- (centerl.west);
+        \draw[->] (centeru.east) -- (right.west);
+        \draw[->] (centerl.east) -- (right.west);
+    \end{tikzpicture}
+    \caption{An example of calculating span for a merge-sort like algorithm. Summed nodes are in red.}
+\end{figure}
 
 Using the above definitions, we can re-derive several laws that provide lower bounds on the running time of \(T_P\).
 
