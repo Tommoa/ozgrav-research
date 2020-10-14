@@ -16,11 +16,18 @@
 \usepackage[
     backend=bibtex,
     style=numeric,
-    sorting=ynt
+    sorting=none
 ]{biblatex}
+\usepackage{hyperref}
 \addbibresource{bibliography.bib}
 
 \renewcommand{\dateseparator}{-}
+\makeatletter
+\renewcommand{\paragraph}{\@startsection{paragraph}{4}{0ex}%
+    {-3.25ex plus -1ex minus -0.2ex}%
+    {1.5ex plus 0.2ex}%
+    {\normalfont\normalsize\bfseries}}
+\makeatother
 
 \onehalfspacing
 
@@ -34,19 +41,20 @@
 
 \newcommand{\HRule}[1]{\rule{\linewidth}{#1}}
 
-\title{\normalsize \textsc{Dissertation}
+\title{\normalsize \textsc{Masters Dissertation}
         \\ [1.5cm]
         \HRule{0.5pt} \\
         \LARGE \textbf{\uppercase{Implementation of N-detectors in a gravitational wave detection pipeline}}
         \HRule{2pt} \\ [0.5cm]
-        \normalsize \date{\today} \vspace*{3\baselineskip}}
+        \normalsize \date{\today} \vspace*{2\baselineskip}}
 
-\author{Thomas Hill Almeida (21963144)\\
-\small{Supervisors: Prof. Linqing Wen, Qi Chu}}
+\author{Thomas Hill Almeida (21963144)\thanks{Software Engineering, University of Western Australia}\\
+\small{Supervisors: Prof. Linqing Wen\thanks{Department of Physics, University of Western Australia}, Qi Chu\footnotemark[2]}}
 \date{}
 
 \begin{document}
 \maketitle{}
+\newpage{}
 \tableofcontents{}
 \newpage{}
 
@@ -55,9 +63,44 @@
     \section*{} \label{sec:abstract}
     % TODO: Write abstract
 \end{minipage}
+
 \section{Introduction} \label{sec:introduction}
+
+Gravitational waves have been postulated to exist since Albert Einstein’s publication of his general theory of relativity, as massive accelerating objects would cause `ripples' in the curvature of spacetime \cite{ligo_einstein}.
+Direct detection of gravitational waves, however, remained beyond the reach of the scientific community until 2015, when the Laser Interferometric Gravitational-Wave Observatory (LIGO \cite[see][]{LIGO}) reported an observation on the 14th of September \cite{FirstDetectionPaper, DetectionWeb}.
+
+Due to their design, the detectors in use for gravitational wave detection have a significant amount of noise from other sources, whilst the gravitational waves themselves have very weak signals.
+As such, a large amount of data processing must be done to the outputs produced by the detectors in order to filter and extract any possible gravitational waves.
+These data processors are known as ``pipelines'', and have historically been created by research groups that are a part of the LIGO Scientific Collaboration (LSC \cite[see][]{LSC}), and are used throughout observation runs for real-time data analysis.
+\\
+
+The Summed Parallel Infinite Impulse Response (SPIIR \cite[see][]{spiir}) pipeline, based on the SPIIR method originally implemented by Shaun Hooper in 2012, uses a number of IIR (infinite impulse response) filters to approximate possible gravitational wave signals for detection \cite{SPIIRCreate}.
+\cite{SPIIRGPU2018} states that the output of the \(i\)th IIR filter can be expressed with the equation:
+\begin{equation}
+    y^i_k = a^i_1y^i_{k-1} + b^i_0x_{k-d_i},
+\end{equation}
+\\
+where \(a^i_1\) and \(b^i_0\) are coefficients, \(k\) is time in a discrete form and \(x_{k-d_i}\) denotes input with some time delay \(d_i\).
+After summing the output of the filters, the resulting signal undergoes coherent post-processing (see section \ref{sec:discuss:analysis} and \cite[chapter 4]{ChuThesis}) to determine the likelihood of an event having occurred.
+
+The pipeline is currently thought to be the fastest of all existing pipelines, is the only pipeline that implements coherent search, and has participated in every observation run since November 2015, successfully detecting most events that were seen in more than one detector.
+
+The SPIIR pipeline uses GStreamer, a library for composing, filtering and moving around signals, in addition to the GStreamer LIGO Algorithm Library (\texttt{gstlal}) \cite{gstlal}.
+After receiving data from the detectors, the pipeline performs data conditioning and data whitening, followed by the usage of the IIR filters.
+The data is then combined for post-processing, where events are given sky localization and then inserted into the LIGO event database \cite{SPIIRGPU2018}.
+
+\subsection{Research Aims} \label{sec:introduction:aims}
+
+At the time of the start of this research, the SPIIR pipeline supported the use of two or three detectors for gravitational wave detection \textemdash{} the two American LIGO detectors and the Italian Virgo detector \textemdash{} although additional interferometers are likely to be introduced soon.
+This presents several issues with the existing pipeline design.
+
+As with many of the other gravitational wave detection pipelines, providing support for additional detectors is a significant undertaking for the development team, with many hours of work and testing that need to be completed.
+As the number of available interferometers continues to grow, development work that could be spent on improving the optimisation, precision, or accuracy of the pipeline would instead have to be spent allowing for those detectors to be used.
+
 \section{Literature Review} \label{sec:lit_review}
-\subsection{Gravitational Wave Detection} \label{sec:lit_review:grav_wave}
+
+\subsection{N-detector work in other gravitational pipelines} \label{sec:lit_review:pipelines}
+
 \subsection{CUDA} \label{sec:lit_review:cuda}
 
 CUDA \cite{CUDA} is an extension of the C++ programming language created by NVIDIA that allows for the development of GPU-accelerated applications.
@@ -118,13 +161,33 @@ This can be approximated with the upper bound of \(O(\dfrac{T_1}{P} + T_N)\) \ci
 
 Determining the span, work, parallelism, efficiency and cost, and examining the application of Brent's theorem to the computations at hand will allow us to analyse the computational complexity of the SPIIR pipeline.
 
-\section{A complexity analysis of the parallel post-processing of the SPIIR pipeline}
+\section{Design process} \label{sec:design_process}
 
-\subsection{Motivation}
+\section{Final Design} \label{sec:final_design}
+
+\section{Discussion} \label{sec:discuss}
+
+\subsection{A complexity analysis of the parallel post-processing of the SPIIR pipeline} \label{sec:discuss:analysis}
+
+Coherent post-processing was introduced in \cite{ChuThesis} by Qi Chu et al as an alternative to the coincidence post-processing used by all other pipelines (see section \ref{sec:lit_review:pipelines}).
+\cite{ChuThesis} states that the multi-detector maximum log likelihood ratio to be equal to the coherent signal to noise ratio \(\rho{}^2_c\), which can be expressed as:
+
+\begin{equation} \label{eq:coh_snr}
+    \rho^2_c = \underset{\max\{A_{jk},\theta,t_{c},\alpha,\delta\}}{\ln \mathcal{L}_{NW}},
+\end{equation}
+\\
+where \(A_{jk}\) describes the relative inclination of the detector to the source, \(\theta\) is the mass of the source, \(\alpha\) and \(\beta\) are the sky directions of the source and \(\mathcal{L}_{NW}\) is the network log likelihood network.
+
+In \cite{ChuThesis}, the computational cost of the coherent search is estimated to be \(O(2N^3_dN_mN_p)\), where \(N_d\) is the number of detectors, \(N_m\) is the number of sets of IIR filters (called templates), and \(N_p\) is the number of potential sky locations.
+Further optimizations were made to the pipeline in 2018 \cite{SPIIRGPU2018}, including moving to using GPU acceleration.
+Whilst \cite{SPIIRGPU2018} discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed.
+In addition, \cite{SPIIRGPU2018} parallelised the pipeline, leading to additional potential changes to the potential overall cost.
+
+\subsubsection{Motivation} \label{sec:discuss:analysis:motivation}
 
 % TODO: Write motivation for complexity analysis. See seminar-presentation
 
-\subsection{Maximum reduction with index preservation} \label{sec:reduce}
+\subsubsection{Maximum reduction with index preservation} \label{sec:discuss:analysis:reduce}
 
 One of the more common operations in the SPIIR pipeline is the concept of a ``maximum reduction with index preservation''.
 Reduction is the idea of taking some array of data and producing a single summary output from that array, whether it is the total sum of the array or the maximum value of the array and its index in the array as it is in this case.
@@ -153,13 +216,13 @@ We can also observe that using \(P = N/\log N\) processors gives a \textit{\text
 
 Functions that include maximum reduction with index preservation will be denoted for clarity with \(M(x)\), where \(x\) is the size of the array being reduced.
 
-\subsection{Determining the number of samples over a signal-to-noise threshold} \label{sec:peaks}
+\subsubsection{Determining the number of samples over a signal-to-noise threshold} \label{sec:discuss:analysis:peaks}
 
 The coherent post-processing in SPIIR determines the number of samples over a signal-to-noise (SNR) threshold in order to not do more work than is required.
 The function that is used for determining the number of samples over the threshold (\texttt{peaks\_over\_thresh}) is a sequential algorithm that runs on the CPU, and shall be analysed as such, although there is an alternative GPU-based implementation that is not used.
 
 Initially, the function performs a maximum reduction with index preservation to get the maximum SNR from the combined IIR filters (templates) for each sample.
-Recalling from section \ref{sec:reduce} that for maximum reduction with index preservation \(T_1 = O(N)\), and that this operation is performed \(S\) times, where \(S\) is the number of samples, we can determine that this initial reduction has a time complexity of \(O(ST)\), where \(T\) is the number of templates.
+Recalling from section \ref{sec:discuss:analysis:reduce} that for maximum reduction with index preservation \(T_1 = O(N)\), and that this operation is performed \(S\) times, where \(S\) is the number of samples, we can determine that this initial reduction has a time complexity of \(O(ST)\), where \(T\) is the number of templates.
 
 The function then determines the maximum SNR across the templates found from the previous step by stepping through every combination of samples and removing SNR samples that are using the same template and have a lower SNR, resulting in a step with a time complexity of \(O(S^2)\).
 
@@ -172,7 +235,7 @@ This gives the overall function a time complexity of \(O(ST + S^2 + S + \min\{S,
     O(ST + S^2).
 \]
 
-\subsection{Transposing the input matrices} \label{sec:transpose}
+\subsubsection{Transposing the input matrices} \label{sec:discuss:analysis:transpose}
 
 The full post-processing function requires that the input matrix is transposed for better memory access such that each row is a different template, and each column is a different sample.
 To transpose the matrix, the GPU function \texttt{transpose\_matrix} is used, thus this should be analysed as a parallel algorithm.
@@ -192,24 +255,24 @@ This gives the function an overall time complexity of:
     O(\dfrac{ST}{P}).
 \]
 
-\subsection{Determining the coherent correlation and statistical value of data points} \label{sec:coh_max_and_chisq_versatile}
+\subsubsection{Determining the coherent correlation and statistical value of data points} \label{sec:discuss:analysis:coh_max_and_chisq_versatile}
 
 The scoring metric of different templates and times is determined using coherent correlation and determining their statistical value using a chi squared-based distribution.
 These scoring metrics are performed using the GPU function \texttt{ker\_coh\_max\_and\_chisq\_versatile}, and thus should be analysed as a parallelised function.
 
-In this function, each block looks at a different SNR maximum (as discussed in section \ref{sec:peaks}) and splits the threads within the blocks for operations on that peak.
+In this function, each block looks at a different SNR maximum (as discussed in section \ref{sec:discuss:analysis:peaks}) and splits the threads within the blocks for operations on that peak.
 
-\subsubsection{Determining the sky direction of the SNR maximum} \label{sec:skydir}
+\paragraph{Determining the sky direction of the SNR maximum} \label{sec:discuss:analysis:skydir}
 
 Initially, each thread within a block looks at a different sky direction and determines the total signal-to-noise ratio (SNR) by summing the SNR of each of the detectors at that given sky direction with the relevant detector arrival time offsets.
 The time complexity for the calculation of SNR for a given time offset is \(O(D + D^2)\), where \(D\) is the number of detectors.
-The maximum SNR for all the sky directions is then spread across each warp and placed into shared memory before being shared across every thread in the block, which is an application of the parallelised maximum reduction with index preservation function discussed in section \ref{sec:reduce}.
+The maximum SNR for all the sky directions is then spread across each warp and placed into shared memory before being shared across every thread in the block, which is an application of the parallelised maximum reduction with index preservation function discussed in section \ref{sec:discuss:analysis:reduce}.
 \\
 
 Thus, the \textit{\textbf{span}} of determining the sky direction with the highest signal to noise ratio is \(T_\infty = O(D + D^2 + M_{T_\infty}(S))\) and the \textit{\textbf{work}} is \(T_1 = O(S(D + D^2) + M_{T_1}(S)\), where \(S\) is the number of sky directions and \(M(x)\) is the complexity of the parallelised maximum reduction with index preservation function.
 We can further state that the \textit{\textbf{parallelism}} of this is equivalent to the number of sky directions, \(S + S/\log S\).
 
-\subsubsection{Calculating signal consistency statistics} \label{sec:stat}
+\paragraph{Calculating signal consistency statistics} \label{sec:discuss:analysis:stat}
 
 After having determined the sky direction with the highest SNR for a given maximum, the function then calculates a signal-morphology based statistic \(\xi_D^2\) for each detector \(D\).
 The statistic is a reduced \(\chi^2\) distribution with \(D\times2 - 4\) degrees of freedom and a mean value of \(1\), and is given in the discrete form by:
@@ -220,11 +283,11 @@ The statistic is a reduced \(\chi^2\) distribution with \(D\times2 - 4\) degrees
 where \(\varrho\) is the coherent SNR, \(A_D\) is the vector of the correlation of the given template with the output from the detector and \(2\times{m}\) is the number of samples.
 
 The numerator of the statistic is calculated by splitting the number of samples between the threads of a block, followed by combining the results of the statistic across each warp and then each block.
-The combination of the statistic across each warp and block is a modification of the parallelised maximum reduction with index preservation discussed in section \ref{sec:reduce} that uses addition instead of maximum as the combining binary function.
+The combination of the statistic across each warp and block is a modification of the parallelised maximum reduction with index preservation discussed in section \ref{sec:discuss:analysis:reduce} that uses addition instead of maximum as the combining binary function.
 Thus the \textit{\textbf{span}} of calculating the statistic is \(T_\infty = O(D\times{M_{T_\infty}(N)})\) and its \textit{\textbf{work}} is \(T_1 = O(D\times{M_{T_1}(N)})\), where \(N\) is the number of samples.
 We can then state that the \textit{\textbf{parallelism}} of calculating the statistic is equivalent to the parallelism of the reduction, \(O(N/\log N)\).
 
-\subsubsection{Generating time-shifted background noise statistics} \label{sec:background}
+\paragraph{Generating time-shifted background noise statistics} \label{sec:discuss:analysis:background}
 
 % Why do we regenerate the background noise for every peak? Other than where we output
 % the background noise, there's no difference between any of the peaks
@@ -235,25 +298,25 @@ The function then performs a number of time shifts on background noise for use w
 The generation of a single background statistical variant is equal to the total work of the function so far, save that instead of using blocks for every peak, each warp looks at a different time shift.
 Thus, whilst the theoretical time complexity does not change, the number of processors available is smaller, so the actual runtime each loop is approximately the warp size slower.
 
-\subsubsection{Overall computational cost} \label{sec:versatile_cost}
+\paragraph{Overall computational cost} \label{sec:discuss:analysis:versatile_cost}
 
 Overall, this function has a \textit{\textbf{span}} of \(T_\infty = 2(D + D^2 + M_{T_\infty}(S) + DM_{T_\infty}(N))\), and has \(T_1 = P(S(D + D^2) + M_{T_1}(S) + DM_{T_1}(N) + B(S(D + D^2) + M_{T_1}(S)))\) \textit{\textbf{work}}, where \(P\) is the number of SNR maxima and \(B\) is the number of times shifts made to background noise.
 
-\subsection{Calculating heat skymaps} \label{sec:coh_skymap}
+\subsubsection{Calculating heat skymaps} \label{sec:discuss:analysis:coh_skymap}
 
 If the coherent SNR exceeds a threshold, the post-processing produces a skymap of the highest SNR in the GPU function \texttt{ker\_coh\_skymap}.
 
-The function determines the highest maximum SNR by using the maximum reduction with index preservation technique discussed in section \ref{sec:reduce}.
-Following this, the function re-performs the process discussed in section \ref{sec:skydir} with additional sky directions and without the reduction to generate the final skymap.
+The function determines the highest maximum SNR by using the maximum reduction with index preservation technique discussed in section \ref{sec:discuss:analysis:reduce}.
+Following this, the function re-performs the process discussed in section \ref{sec:discuss:analysis:skydir} with additional sky directions and without the reduction to generate the final skymap.
 
 As such, this function has a \textit{\textbf{span}} of \(T_\infty = M_{T_\infty}(P) + D + D^2\) and total \textit{\textbf{work}} of \(T_1 = M_{T_1}(P) + S(D + D^2)\).
 
-\subsection{Conclusion} \label{sec:conclusion}
+\subsubsection{Overall complexity} \label{sec:discuss:analysis:overall}
 
 The total span and work of the coherent post-processing step in the SPIIR pipeline is the sum of the total spans and works of the internal functions.
 Conversely, we cannot determine the overall parallelism as the post-processing step spans a number individual functions that can each be run with a different set of processors.
-As the step to determine the number of peaks over a threshold (see section \ref{sec:peaks}) is sequential, we can consider its time complexity as contributing to both the span and work of the total pipeline.
-Another thing to note is that the steps for determining the coherent correlation, statistic value and skymaps (sections \ref{sec:coh_max_and_chisq_versatile} and \ref{sec:skydir}) will be run for every detector.
+As the step to determine the number of peaks over a threshold (see section \ref{sec:discuss:analysis:peaks}) is sequential, we can consider its time complexity as contributing to both the span and work of the total pipeline.
+Another thing to note is that the steps for determining the coherent correlation, statistic value and skymaps (sections \ref{sec:discuss:analysis:coh_max_and_chisq_versatile} and \ref{sec:discuss:analysis:skydir}) will be run for every detector.
 
 With this in mind, we can determine that the \textit{\textbf{span}} of the post-processing is:
 
@@ -274,9 +337,13 @@ The total \textit{\textbf{work}} of the post-processing is:
 \end{equation}
 where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(T\) is the number of templates, \(N\) is the number of samples, \(B\) is the number of is the number of times shifts made to background noise and \(P = \max\{ S, T \}\)
 
-\subsection{Implications}
+\subsubsection{Implications} \label{sec:discuss:analysis:implications}
 
 % TODO: Write implications -- see seminar-talk
+
+\section{Further work} \label{sec:further_work}
+
+\section{Conclusion} \label{sec:conclusion}
 
 \printbibliography[heading=bibintoc]{}
 
