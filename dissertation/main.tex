@@ -127,6 +127,31 @@ Finally, section \ref{sec:further_work} will provide some suggestions for future
 \subsection{\(N\)-detector work in other gravitational wave detection pipelines} \label{sec:lit_review:pipelines}
 
 There are, of course, other gravitational wave detection pipelines that may also have to consider the issue of dealing with a growing number of detectors.
+As we are in the process of designing a new architecture to allow for any number of detectors to be used, it is well worth examining the methods that the other pipelines may use to shape our own design.
+
+Most detection pipelines use a ``coincidence'' search to determine whether a gravitational wave event has occurred.
+Coincidence search, as defined by \cite[chapter 3]{ChuThesis}, is a process which includes finding candidates for gravitational waves from individual detectors, identifying temporal coincidences and producing measures to rank candidate events.
+In more simple terms, a coincidence search considers events which can be seen in a single detector, and then sanity checks that other detectors may have seen them at the same time.
+
+In contrast, the SPIIR pipeline uses a ``coherent'' search to determine whether a gravitational wave event has occurred, using the maximum likelihood ratio principle to consider specific parameters of a potential signal \cite[chapter 4]{ChuThesis}.
+As such, it is unlikely that all of the principles for dealing with additional detectors may translate directly to being able to be used for the SPIIR pipeline, as the method of search differs.
+\\
+
+PyCBC is one of the most well known toolkits for gravitational wave astronomy, and was one of the pipelines used in the original 2015 gravitational wave detection \cite{pycbc_home}.
+From an examination of the codebase of the latest version of PyCBC \cite[October 2020]{pycbc}, it can be observed that the codebase itself makes no direct mention of detectors \textemdash{} instead it provides a generic \texttt{Detector} class as a wrapper around LALSuite's \cite{lalsuite} \texttt{LALDetector} structure for validation, which in turns provides utilities for returning information about the detector as well as methods for getting readings from it.
+
+This allows PyCBC to provide an entirely generic gravitational wave searching algorithm library for any input detectors, although the algorithm only supports using two detectors at a time, providing that the detectors are in the LALSuite library.
+Thus, we can note two things; for PyCBC to allow for additional detectors to be used, they simply update their dependency on the LALSuite library, and; PyCBC doesn't quite support \(N\)-detectors in the sense described in section \ref{sec:introduction:aims}, instead it allows for any supported detectors to be used in a two-detector search.
+This means that whilst we cannot use PyCBC when considering how to support support any number of detectors within a gravitational-wave searching algorithm nor its outputs, we can use PyCBC to consider a programming interface with which to support other detectors.
+\\
+
+GstLAL is gravitational wave detection library, that exposes components of LALSuite \cite{lalsuite} as GStreamer elements for use in other analysis pipelines \textemdash{} including the SPIIR pipeline \textemdash{} as well as providing its own pipeline for processing raw signals from detectors into lists of gravitational wave candidates \cite{gstlal_docs}.
+The GstLAL's pipeline hard-codes the detector names into both its inputs and its outputs, however the algorithm used for detection itself is actually generic on which detectors are used \cite{gstlal_paper, gstlal_coinc}.
+
+This means that the process of adding support for detectors involves changing a number of different files, as well as modifying several internal data structures \cite{messick} \textemdash{} which means that whilst GstLAL does not support \(N\)-detectors.
+\\
+
+Thus any work done to design \(N\)-detector support for the SPIIR pipeline will be novel work.
 
 \subsection{CUDA} \label{sec:lit_review:cuda}
 
@@ -149,14 +174,15 @@ Thus, one major determining factor in any speed-up given by a CUDA operation can
 
 According to \cite{CLRS_parallel}, the theoretical efficiency of a multi-threaded or parallelised algorithm can be measured using the metrics of `span', `work', `speed-up' and `parallelism', all of which should be considered in the context of a directed acyclic graph (DAG) of operations in the algorithm.
 The \textit{\textbf{work}} of a parallelised computation is the total time to execute the entire computation sequentially on a single processor, and can be found by summing the total work of every vertex in the DAG.
+An example of \textit{\textbf{work}} for a merge-sort like algorithm can be seen in figure \ref{fig:work}, which has a work of \(O(N\log{N})\).
 In comparison, the \textit{\textbf{span}} of a parallelised computation is the maximum time taken to complete any path in the DAG.
+An example of \textit{\textbf{span}} for a merge-sort like algorithm can be seen in figure \ref{fig:span}, which has a work of \(O(N)\).
 It should be noted that the actual running time of a parallelised computation also depends on the number of processors available for computation and how they are allocated to perform different tasks in the DAG, and thus denoting the running time of parallelised computation on \(P\) processors as \(T_P\) is also common practice.
 This leads to work being denoted at \(T_1\) (the time taken to run on a single processor) and span being denoted as \(T_\infty\) (the time taken on an infinite number of processors).
 Another helpful metric is \textit{\textbf{speed-up}}, which shows how the algorithm scales with additional processors as \(S_P = \dfrac{T_1}{T_P}\).
 We can also then define \textit{\textbf{parallelism}} as the maximum possible speed-up on an infinite number of processors, and thus as \(p = \dfrac{T_1}{T_\infty}\).
 
-\begin{figure}
-    \label{fig:work}
+\begin{figure}[t]
     \centering
     \begin{tikzpicture}[
         selectednode/.style={circle, text=black, draw=red!60, fill=red!5, very thick, minimum size=7mm},
@@ -193,10 +219,10 @@ We can also then define \textit{\textbf{parallelism}} as the maximum possible sp
         \draw[->] (centeru.east) -- (right.west);
         \draw[->] (centerl.east) -- (right.west);
     \end{tikzpicture}
-    \caption{An example of calculating work for a merge-sort like algorithm. Summed nodes are in red.}
+    \caption{An example of calculating work for a merge-sort like algorithm. Summed nodes are in red.\label{fig:work}}
 \end{figure}
-\begin{figure}
-    \label{fig:span}
+
+\begin{figure}[t]
     \centering
     \begin{tikzpicture}[
         selectednode/.style={circle, text=black, draw=red!60, fill=red!5, very thick, minimum size=7mm},
@@ -233,7 +259,7 @@ We can also then define \textit{\textbf{parallelism}} as the maximum possible sp
         \draw[->] (centeru.east) -- (right.west);
         \draw[->] (centerl.east) -- (right.west);
     \end{tikzpicture}
-    \caption{An example of calculating span for a merge-sort like algorithm. Summed nodes are in red.}
+    \caption{An example of calculating span for a merge-sort like algorithm. Summed nodes are in red.\label{fig:span}}
 \end{figure}
 
 Using the above definitions, we can re-derive several laws that provide lower bounds on the running time of \(T_P\).
