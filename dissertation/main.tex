@@ -72,7 +72,7 @@
 
 \section{Introduction} \label{sec:introduction}
 
-Gravitational waves have been postulated to exist since Albert Einstein’s publication of his general theory of relativity, as massive accelerating objects would cause `ripples' in the curvature of spacetime \cite{ligo_einstein}.
+Gravitational waves have been postulated to exist since Albert Einstein's publication of his general theory of relativity, as massive accelerating objects would cause `ripples' in the curvature of spacetime \cite{ligo_einstein}.
 Direct detection of gravitational waves, however, remained beyond the reach of the scientific community until 2015, when the Laser Interferometric Gravitational-Wave Observatory (LIGO \cite[see][]{LIGO}) reported an observation on the 14th of September \cite{FirstDetectionPaper, DetectionWeb}.
 
 Due to their design, the detectors in use for gravitational wave detection have a significant amount of noise from other sources, whilst the gravitational waves themselves have very weak signals.
@@ -116,13 +116,17 @@ Thus, this dissertation aims to layout the design and implementation work done t
 \\
 
 Section \ref{sec:lit_review} shall explore the existing literature on the implementation of \(N\)-detectors in other gravitational wave detection pipelines, in addition to exploring CUDA and complexity analysis, two tools that will be used in the analysis of the final design.
-Section \ref{sec:design_process} will look at the existing pipeline structure and its deficencies for implementing \(N\)-detectors.
+Section \ref{sec:design_process} will look at the existing pipeline structure and its deficiencies for implementing \(N\)-detectors.
 It will also determine any constraints a design for implementing \(N\)-detectors would have, and will provide a framework for evaluating the success of the resulting design.
 The final design will be presented in section \ref{sec:final_design}, and will explore the implementation details of the design and how it interacts with the existing programming interface that SPIIR provides.
 A discussion about the implications of this design will be done in section \ref{sec:discuss}, with additional research on those implications being presented there.
 Finally, section \ref{sec:further_work} will provide some suggestions for future research that can be based on this research.
 
 \section{Literature Review} \label{sec:lit_review}
+
+This section explores the existing research that is relevant to this project.
+Section \ref{sec:lit_review:pipelines} shall explore the implementations that other gravitational wave detection pipelines have used to deal with with a growing number of detectors in their algorithms and interfaces, whilst section \ref{sec:lit_review:cuda} will explore the computational model of CUDA, the library that SPIIR uses for parallelism.
+Finally, section \ref{sec:lit_review:par_comp_analysis} shall explore the literature of parallel complexity analysis, which will allow for the later analysis of the pipeline in section \ref{sec:discuss:analysis}.
 
 \subsection{\(N\)-detector work in other gravitational wave detection pipelines} \label{sec:lit_review:pipelines}
 
@@ -157,7 +161,7 @@ Thus any work done to design \(N\)-detector support for the SPIIR pipeline will 
 
 CUDA \cite{CUDA} is an extension of the C++ programming language created by NVIDIA that allows for the development of GPU-accelerated applications.
 In \cite{SPIIRGPU2018}, the SPIIR pipeline had multiple components rewritten in CUDA to take advantage of the high number of simultaneous threads available compared to CPUs.
-As such, it is worth understanding the computational model of CUDA for the analysis of the coherent post-processing step of SPIIR.
+As such, it is worth understanding the computational model of CUDA for the analysis of the SPIIR pipeline.
 
 In CUDA, each individual sequence of instructions being executed is called a \textit{thread}.
 By its nature, a highly-parallelised environment such as GPUs will run many individual threads, which are partitoned into \textit{warps}, a group of (typically 32) threads.
@@ -170,7 +174,12 @@ The CUDA Programming Guide (\cite{CUDA_Guide}) states that the number of blocks 
 For the purpose of actual time-based computation, the maximum number of threads that can run at any given time is determined by a few factors of the CUDA runtime; the maximum number of resident warps per SM; the maximum number of resident threads per SM; the number of 32-bit registers per thread; the number of 32-bit registers per SM; the number of 32-bit registers per thread block; and the amount of shared memory in each of those divisions.
 Thus, one major determining factor in any speed-up given by a CUDA operation can be determined by the ability to split the workload across threads and thread blocks such that the number of registers and used memory is well balanced across threads.
 
-\subsection{Parallel Complexity Analysis} \label{sec:lit_review:par_comp_analysis}
+\subsection{Parallelised Complexity Analysis} \label{sec:lit_review:par_comp_analysis}
+
+As the pipeline changes to accommodate additional detectors, it is important that the impact that this has on the pipeline's runtime is considered.
+The SPIIR pipeline is designed to be as low latency as possible, and an asymptotic complexity analysis of components that may be impacted by the addition of new detectors allows for the measurement of the potential runtime cost of doing so.
+The SPIIR pipeline has been parallelised using CUDA \cite{SPIIRGPU2018}, and thus determining the asymptotic complexity of components of the pipeline requires different considerations to that of a sequential program.
+\\
 
 According to \cite{CLRS_parallel}, the theoretical efficiency of a multi-threaded or parallelised algorithm can be measured using the metrics of `span', `work', `speed-up' and `parallelism', all of which should be considered in the context of a directed acyclic graph (DAG) of operations in the algorithm.
 The \textit{\textbf{work}} of a parallelised computation is the total time to execute the entire computation sequentially on a single processor, and can be found by summing the total work of every vertex in the DAG.
@@ -297,7 +306,32 @@ Determining the span, work, parallelism, efficiency and cost, and examining the 
 
 \section{Design process} \label{sec:design_process}
 
+This section aims to layout and discuss the design process used to arrive at the final design of the \(N\)-detector implementation.
+Section \ref{sec:design_process:constraints} will discuss the various design constraints that should be factored in any design implementation, and section \ref{sec:design_process:tools} will discuss the tools used throughout the design process.
+The code sections that will be impacted by the implementation will be explored in section \ref{sec:design_process:code}, and a framework for evaluating the success of the implementation will be discussed in section \ref{sec:design_process:criteria}.
+
+\subsection{Design Constraints} \label{sec:design_process:constraints}
+% Description of the constraints imposed on the design
+
+\subsection{Employed tools} \label{sec:design_process:tools}
+% Description of any tools employed
+
+\subsection{Relevant code} \label{sec:design_process:code}
+% Discussion of relevant code sections or requirements
+
+\subsection{Evaluation criteria} \label{sec:design_process:criteria}
+% Framework for evaluating the success of the resulting design
+
 \section{Final Design} \label{sec:final_design}
+
+\subsection{Patches} \label{sec:final_design:patches}
+% Description of the patches made
+
+\subsection{Testing} \label{sec:final_design:testing}
+% Testing of the design
+
+\subsection{Evaluation} \label{sec:final_design:evaluation}
+% Evaluation as per above
 
 \section{Discussion} \label{sec:discuss}
 
@@ -321,9 +355,9 @@ In addition, \cite{SPIIRGPU2018} parallelised the pipeline, leading to additiona
 
 % TODO: Write motivation for complexity analysis. See seminar-presentation
 
-\subsubsection{Maximum reduction with index preservation} \label{sec:discuss:analysis:reduce}
+\subsubsection{Maximum element reduction} \label{sec:discuss:analysis:reduce}
 
-One of the more common operations in the SPIIR pipeline is the concept of a ``maximum reduction with index preservation''.
+One of the more common operations in the SPIIR pipeline is the concept of a ``maximum element reduction''.
 Reduction is the idea of taking some array of data and producing a single summary output from that array, whether it is the total sum of the array or the maximum value of the array and its index in the array as it is in this case.
 
 \cite{reduction} discusses the computational complexity of reduction algorithms in a parallelised context, noting that the best complexity according to Brent's Law is \(O(\dfrac{N}{\log N})\) threads each doing \(O(\log N)\) sequential work, resulting in a total overall cost of \(O(\dfrac{N}{\log N}\times{\log N}) = O(N)\).
@@ -348,15 +382,15 @@ thus the time complexity cannot improve past \(P = N/\log N\) processors.
 We can also observe that using \(P = N/\log N\) processors gives a \textit{\textbf{cost}} of \(C_P = N\), which is identical to the sequential algorithm.
 \\
 
-Functions that include maximum reduction with index preservation will be denoted for clarity with \(M(x)\), where \(x\) is the size of the array being reduced.
+Functions that include maximum element reduction will be denoted for clarity with \(M(x)\), where \(x\) is the size of the array being reduced.
 
 \subsubsection{Determining the number of samples over a signal-to-noise threshold} \label{sec:discuss:analysis:peaks}
 
 The coherent post-processing in SPIIR determines the number of samples over a signal-to-noise (SNR) threshold in order to not do more work than is required.
 The function that is used for determining the number of samples over the threshold (\texttt{peaks\_over\_thresh}) is a sequential algorithm that runs on the CPU, and shall be analysed as such, although there is an alternative GPU-based implementation that is not used.
 
-Initially, the function performs a maximum reduction with index preservation to get the maximum SNR from the combined IIR filters (templates) for each sample.
-Recalling from section \ref{sec:discuss:analysis:reduce} that for maximum reduction with index preservation \(T_1 = O(N)\), and that this operation is performed \(S\) times, where \(S\) is the number of samples, we can determine that this initial reduction has a time complexity of \(O(ST)\), where \(T\) is the number of templates.
+Initially, the function performs a maximum element reduction to get the maximum SNR from the combined IIR filters (templates) for each sample.
+Recalling from section \ref{sec:discuss:analysis:reduce} that for maximum element reduction \(T_1 = O(N)\), and that this operation is performed \(S\) times, where \(S\) is the number of samples, we can determine that this initial reduction has a time complexity of \(O(ST)\), where \(T\) is the number of templates.
 
 The function then determines the maximum SNR across the templates found from the previous step by stepping through every combination of samples and removing SNR samples that are using the same template and have a lower SNR, resulting in a step with a time complexity of \(O(S^2)\).
 
@@ -400,10 +434,10 @@ In this function, each block looks at a different SNR maximum (as discussed in s
 
 Initially, each thread within a block looks at a different sky direction and determines the total signal-to-noise ratio (SNR) by summing the SNR of each of the detectors at that given sky direction with the relevant detector arrival time offsets.
 The time complexity for the calculation of SNR for a given time offset is \(O(D + D^2)\), where \(D\) is the number of detectors.
-The maximum SNR for all the sky directions is then spread across each warp and placed into shared memory before being shared across every thread in the block, which is an application of the parallelised maximum reduction with index preservation function discussed in section \ref{sec:discuss:analysis:reduce}.
+The maximum SNR for all the sky directions is then spread across each warp and placed into shared memory before being shared across every thread in the block, which is an application of the parallelised maximum element reduction function discussed in section \ref{sec:discuss:analysis:reduce}.
 \\
 
-Thus, the \textit{\textbf{span}} of determining the sky direction with the highest signal to noise ratio is \(T_\infty = O(D + D^2 + M_{T_\infty}(S))\) and the \textit{\textbf{work}} is \(T_1 = O(S(D + D^2) + M_{T_1}(S)\), where \(S\) is the number of sky directions and \(M(x)\) is the complexity of the parallelised maximum reduction with index preservation function.
+Thus, the \textit{\textbf{span}} of determining the sky direction with the highest signal to noise ratio is \(T_\infty = O(D + D^2 + M_{T_\infty}(S))\) and the \textit{\textbf{work}} is \(T_1 = O(S(D + D^2) + M_{T_1}(S)\), where \(S\) is the number of sky directions and \(M(x)\) is the complexity of the parallelised maximum element reduction function.
 We can further state that the \textit{\textbf{parallelism}} of this is equivalent to the number of sky directions, \(S + S/\log S\).
 
 \paragraph{Calculating signal consistency statistics} \label{sec:discuss:analysis:stat}
@@ -417,7 +451,7 @@ The statistic is a reduced \(\chi^2\) distribution with \(D\times2 - 4\) degrees
 where \(\varrho\) is the coherent SNR, \(A_D\) is the vector of the correlation of the given template with the output from the detector and \(2\times{m}\) is the number of samples.
 
 The numerator of the statistic is calculated by splitting the number of samples between the threads of a block, followed by combining the results of the statistic across each warp and then each block.
-The combination of the statistic across each warp and block is a modification of the parallelised maximum reduction with index preservation discussed in section \ref{sec:discuss:analysis:reduce} that uses addition instead of maximum as the combining binary function.
+The combination of the statistic across each warp and block is a modification of the parallelised maximum element reduction discussed in section \ref{sec:discuss:analysis:reduce} that uses addition instead of maximum as the combining binary function.
 Thus the \textit{\textbf{span}} of calculating the statistic is \(T_\infty = O(D\times{M_{T_\infty}(N)})\) and its \textit{\textbf{work}} is \(T_1 = O(D\times{M_{T_1}(N)})\), where \(N\) is the number of samples.
 We can then state that the \textit{\textbf{parallelism}} of calculating the statistic is equivalent to the parallelism of the reduction, \(O(N/\log N)\).
 
@@ -440,7 +474,7 @@ Overall, this function has a \textit{\textbf{span}} of \(T_\infty = 2(D + D^2 + 
 
 If the coherent SNR exceeds a threshold, the post-processing produces a skymap of the highest SNR in the GPU function \texttt{ker\_coh\_skymap}.
 
-The function determines the highest maximum SNR by using the maximum reduction with index preservation technique discussed in section \ref{sec:discuss:analysis:reduce}.
+The function determines the highest maximum SNR by using the maximum element reduction technique discussed in section \ref{sec:discuss:analysis:reduce}.
 Following this, the function re-performs the process discussed in section \ref{sec:discuss:analysis:skydir} with additional sky directions and without the reduction to generate the final skymap.
 
 As such, this function has a \textit{\textbf{span}} of \(T_\infty = M_{T_\infty}(P) + D + D^2\) and total \textit{\textbf{work}} of \(T_1 = M_{T_1}(P) + S(D + D^2)\).
@@ -474,6 +508,8 @@ where \(D\) is the number of detectors, \(S\) is the number of sky directions, \
 \subsubsection{Implications} \label{sec:discuss:analysis:implications}
 
 % TODO: Write implications -- see seminar-talk
+
+\subsection{Improvements to maximum element reduction}
 
 \section{Further work} \label{sec:further_work}
 
