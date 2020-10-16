@@ -313,6 +313,29 @@ The code sections that will be impacted by the implementation will be explored i
 \subsection{Design Constraints} \label{sec:design_process:constraints}
 % Description of the constraints imposed on the design
 
+In the process of designing any system or any modifications thereof, constraints on that design must be considered and factored in.
+This section aims to lay out and discuss the various design constraints that should be imposed on any final design.
+
+The below constraints are ordered in importance.
+
+\begin{itemize}
+    \item \textbf{The output table format should be unchanged}\\
+        Events that are detected by the SPIIR pipeline are uploaded to the gravitational-wave candidate event database (GraceDB) using a unified table format to represent event data \cite{gracedb}.
+        It is of critical importance that the SPIIR pipeline is still able to interact with GraceDB so that it can continue to have detected events considered by the wider gravitational-wave community.
+    \item \textbf{Adding new detectors should be able to be done by a non-technical individual}\\
+        The wider gravitational-wave detection community is largely composed of physicists as opposed to software engineers.
+        As such, any changes to the number of detectors are likely to be able to be best tested by non-technical members of the gravitational-wave community, as the expertise to ensure that the values output by the pipeline are correct are more likely to come from physicists.
+        Any design for \(N\)-detector support should ensure that the process of adding detectors should be easy enough to be completed and tested by a non-technical individual.
+    \item \textbf{The external interface of the pipeline should not change}\\
+        There are many developers and scientists that are using the existing SPIIR pipeline and use customised scripts that automate gravitational wave searches.
+        The ability to support \(N\)-detectors should be a largely internal change, without needing to modify the way that other users interact with the pipeline and force modifications to existing search scripts.
+    \item \textbf{Individual detectors should still be exposed in Python code}\\
+        There are several reasons for this constraint to be factored into any implementation.
+        First, exposing individual detectors in the Python code allows for easier programming debugging of any values that may be incorrect, as the values of each detector would be immediately evident by the variable names instead of having be indirectly referenced by knowledge of the data structure used to hold the group of detectors.
+        In addition, the Python code that interacts with GraceDB iterates through the list of detectors and uses the individual detector names to collect the data required for each event.
+        By exposing individual detectors to the Python code, none of the code that interacts with GraceDB would need to change.
+\end{itemize}
+
 \subsection{Employed tools} \label{sec:design_process:tools}
 % Description of any tools employed
 
