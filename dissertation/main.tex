@@ -339,6 +339,26 @@ The below constraints are ordered in importance.
 \subsection{Employed tools} \label{sec:design_process:tools}
 % Description of any tools employed
 
+There are a number of tools that were employed in the process of designing and testing the \(N\)-detector implementation.
+These were:
+\begin{itemize}
+    \item \textbf{OzStar \cite{ozstar}}\\
+        ``OzStar'' is a computing cluster hosted at the University of Swinburne for use in gravitational-wave discovery and theoretical astrophysics.
+        Much of the SPIIR development process occurs on OzStar, and its head nodes were used for both building and testing the modifications made to the SPIIR pipeline.
+    \item \textbf{LIGO DataGrid (LDG) \cite{ldg}}\\
+        The LDG is the collection of clusters that the LSC uses for running the various gravitational-wave detection pipelines on live data.
+        Testing and benchmarking (see section \ref{sec:discuss:benchmark}) were performed on the LDG as the available nodes there closely mirror those that the SPIIR pipeline will run on.
+    \item \textbf{SPIIR scripts \cite{build_spiir}}\\
+        ``SPIIR scripts'' is a collection of scripts maintained by Patrick Clearwater for use in the SPIIR development process.
+        The \texttt{build\_spiir} script from this collection was used to build the modifications made to the pipeline.
+    \item \textbf{GWDC utils \cite{gwdc_utils}}\\
+        ``GWDC utils'' is a collection of utilities maintained by Alex Codoreanu that are written to perform various tasks for the SPIIR pipeline.
+        The unit tests that are exposed as a part of GWDC utils were used for testing that the modifications made to the pipeline didn't affect its output (see section \ref{sec:design_process:constraints}).
+    \item \textbf{OzGrav Research utils \cite[\texttt{utils/}]{ozgrav_research}}\\
+        ``OzGrav Research utils'' is a collection of utilities created by Thomas Almeida to automate the process of creating callgraphs from C or CUDA code on the OzStar cluster.
+        These were used in the generation of callgraphs which were used for the complexity analysis in section \ref{sec:discuss:analysis}.
+\end{itemize}
+
 \subsection{Relevant code} \label{sec:design_process:code}
 % Discussion of relevant code sections or requirements
 
@@ -400,6 +420,8 @@ In \cite{ChuThesis}, the computational cost of the coherent search is estimated 
 Further optimizations were made to the pipeline in 2018 \cite{SPIIRGPU2018}, including moving to using GPU acceleration.
 Whilst \cite{SPIIRGPU2018} discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed.
 In addition, \cite{SPIIRGPU2018} parallelised the pipeline, leading to additional potential changes to the potential overall cost.
+
+``OzGrav Research utils'' (see section \ref{sec:design_process:tools}) were used to generate a callgraph to determine the data flow for this analysis \cite[\texttt{resources/callgraph.png}]{ozgrav_research}.
 
 \subsubsection{Motivation} \label{sec:discuss:analysis:motivation}
 
@@ -559,7 +581,7 @@ where \(D\) is the number of detectors, \(S\) is the number of sky directions, \
 
 % TODO: Write implications -- see seminar-talk
 
-\subsection{Improvements to maximum element reduction}
+\subsection{Improvements to maximum element reduction} \label{sec:discuss:benchmark}
 
 \section{Further work} \label{sec:further_work}
 
