@@ -342,6 +342,33 @@ The below constraints are ordered in importance.
 \subsection{Relevant code} \label{sec:design_process:code}
 % Discussion of relevant code sections or requirements
 
+The relevant code sections that may need to be modified to support any number of detectors can be observed in figure \ref{fig:spiir_structure} as any step after the individual detector SPIIR filtering is combined.
+This includes:
+\begin{itemize}
+    \item Coherent post-processing with sky localization\\ \cite[\texttt{gstlal-spiir/gst/cuda/postcoh/}]{spiir}
+    \item \(\mathcal{R}(\rho_c,\xi^2_c)\) from previous background events\\ \cite[\texttt{gstlal-spiir/gst/cuda/cohfar/cohfar\_accumbackground.c}]{spiir}
+    \item False Alarm Rate (FAR) assignment to foreground events\\ \cite[\texttt{gstlal-spiir/gst/cuda/cohfar/cohfar\_assignfar.c}]{spiir}
+    \item Trigger and skymap to GW trigger database\\ \cite[\texttt{gstlal-spiir/python/pipemodules/postcoh\_finalsink.py}]{spiir}
+\end{itemize}
+
+In addition, the data structures that are passed between the components also need to be modified.
+This includes the \texttt{PostcohInspiralTable} \cite[\texttt{gstlal-spiir/python/pipemodules/postcohtable/}]{spiir} and the \texttt{PeakList} \cite[\texttt{gstlal-spiir/gst/cuda/postcoh/postcoh.h}]{spiir}.
+
+These files are mixed between several different languages; C, CUDA (see section \ref{sec:lit_review:cuda}), and Python.
+As such, any \(N\)-detector implementation must consider the ability to:
+\begin{itemize}
+    \item \textbf{Move easily between GPU and CPU memory}\\
+        CUDA provides two interfaces for allocating and managing memory across a GPU and CPU; managed memory and memory copies.
+        Managed memory automatically propagates changes to allocated memory in a GPU or CPU to the other address space, whilst memory copies copy a block of memory from one address space to another.
+ 
+        The existing SPIIR pipeline uses memory copies for transferring data to and from the GPU address space, and as such the implementation of \(N\)-detectors should ensure that the existing memory copies will still function as expected.
+        This means that flat data structures would be generally preferred, as they can be copied with a single memory copy.
+
+    \item \textbf{Interoperability between Python and C code}\\
+        The \texttt{PostcohInspiralTable} is a C data structure that exposes a Python interface and the final trigger generation and uploading to GraceDB takes the data structure as an input.
+        As such, it is vital that any changes to the \texttt{PostcohInspiralTable} are able to be used in the Python interface that it exposes.
+\end{itemize}
+
 \subsection{Evaluation criteria} \label{sec:design_process:criteria}
 % Framework for evaluating the success of the resulting design
 
