@@ -476,11 +476,57 @@ The final design will be evaluated according to these criteria in section \ref{s
 
 \section{Final Design} \label{sec:final_design}
 
+This section aims to describe and expand on the final design and implementation chosen for allowing the SPIIR pipeline to work with any number of detectors.
+
+Section \ref{sec:final_design:patches} discusses the major components and changes that each source code patch makes to the codebase, and the testing that the patches went through will be described in section \ref{sec:final_design:testing}.
+The final design and implementation will be evaluated according to the criteria laid out in section \ref{sec:design_process:criteria} in section \ref{sec:final_design:evaluation}.
+
 \subsection{Patches} \label{sec:final_design:patches}
 % Description of the patches made
 
+The patches referred to in this section can be found in appendix \ref{app:patches}.
+
+\subsubsection{Making \texttt{IFOComboMap} be sums of powers of two} \label{sec:final_design:patches:ifocombo}
+
+The patch for this section can be found in appendix \ref{app:patches:icombo}.
+
+Internally, the pipeline uses a static constant array defined in \texttt{gstlal-spiir/include/pipe\_macro.h} called the ``\texttt{IFOComboMap}'' to keep track of which detectors it is processing.
+The original ordering of the array is as follows:
+\begin{itemize}
+    \item All single detectors
+    \item All combinations of two detectors
+    \item All combinations of three detectors
+\end{itemize}
+
+This presents a problem when adding detectors, as the indexing of the array would change such that; all combinations of two detectors are shifted by at least 1, and; all combinations of three detectors are shifted by at least \(\binom{n}{2}-\binom{n-1}{2}\), where \(n\) is the number of detectors, etc..
+Any time the number of detectors would change, then all of the locations that index the \texttt{IFOComboMap} would also need to change to match, to ensure that they remain indexing the right combinations.
+For example, the \texttt{scan\_trigger\_ifos} function in \texttt{gstlal-spiir/gst/cuda/cohfar/background\_stats\_utils.c} determines which detectors should be active by checking the indexes of the \texttt{IFOComboMap}, and if the number of detectors change, all of the indexing done in the function will also have to change.
+
+The \texttt{IFOComboMap} is, as the name suggests, a list of all of the combinations of detectors, not including combinations of zero detectors.
+As a special case of the binomial expansion;
+\( (x + y)^n = \sum^n_{k=0}\binom{n}{k}x^ky^{n-k} \) when \(x = y = 1\), we can note that \cite{CLRS_combinations};
+
+\begin{equation}
+    \label{eq:power2}
+    \sum^n_{k=0}\binom{n}{k} = 2^n.
+\end{equation}
+
+As per equation \ref{eq:power2}, the sum of the number of combinations of \(n\) elements is equal to \(2^n\).
+This lends itself well to binary numbers, as an 8-bit binary number can represent \(2^8\) numbers or all the combinations of 8 elements \textemdash{} which means that we can represent all combinations of \(N\) detectors with \(N\) bits.
+
+By having each detector represented as a single bit in a \(N\)-bit number, there are a number of advantages across the codebase that are evident as well.
+\texttt{popcount} (or \texttt{POPCNT}) is an instruction for x86 processors and NVIDIA GPUs that returns the number of set (1) bits in an integer, and thus the number of detectors being used can be determined with a single instruction.
+In addition, whether a detector is being used can be determined using a bitwise \texttt{AND} of the combination and \(2^{i}\), where \(i\) is the index of the detector.
+These both simplify large areas of the codebase, and make up the majority of the patch in appendix \ref{app:patches:icombo}.
+
+By implementing this change, adding a new detector does not modify the existing indexing into the \texttt{IFOComboMap}, significantly reducing the number of files and code locations that would need to be modified to support a new detector.
+
 \subsection{Testing} \label{sec:final_design:testing}
 % Testing of the design
+
+As per section \ref{sec:design_process:tools}, the \texttt{build\_spiir} script from ``SPIIR scripts'' was used for building the changes to the code, and the unit tests from ``GWDC utils'' were used to ensure that the output of the pipeline was not affected by the code modifications.
+
+
 
 \subsection{Evaluation} \label{sec:final_design:evaluation}
 % Evaluation as per above
@@ -694,11 +740,11 @@ where \(D\) is the number of detectors, \(S\) is the number of sky directions, \
 
 \begin{appendices}
     \section{Patches} \label{app:patches}
-    \subsection{IFO Combo} \label{app:patches:icombo}
+    \subsection{Making \texttt{IFOComboMap} be sums of powers of two} \label{app:patches:icombo}
     \linespread{0.3}
     \footnotesize{\lstinputlisting[language=diff]{../patches/ifocombo.patch}}
     \linespread{1}
-    \subsection{N-detector} \label{app:patches:ndetector}
+    \subsection{Removing hard-coded detector names} \label{app:patches:ndetector}
     \linespread{0.3}
     \footnotesize{\lstinputlisting[language=diff]{../patches/n-detector.patch}}
     \linespread{1}
