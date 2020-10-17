@@ -14,6 +14,7 @@
 \usepackage{longtable}
 \usepackage{graphicx}
 \usepackage[table, xcdraw]{xcolor}
+\usepackage{listings}
 \usepackage{pgfplots}
 \usepackage{tikz}
 \usepackage[
@@ -34,6 +35,68 @@
 
 \pgfplotsset{compat=1.16}
 \usetikzlibrary{positioning}
+
+\lstdefinelanguage{diff}{
+  sensitive=true,
+  % diff command line
+  morecomment=[f][\color{gray}][0]{diff},
+  % commit identifiers for git diff
+  morecomment=[f][\color{gray}][0]{index},
+  % hunk location/line numbers for unified format
+  morecomment=[f][\color{blue}][0]{@@},
+  % hunk location/line numbers for context format
+  morecomment=[f][\color{magenta}][0]{***},
+  % changed line for context format
+  morecomment=[f][\color{violet}][0]{!},
+  % deleted lines for unified format
+  morecomment=[f][\color{red!60!black}][0]-,
+  % added lines for unified format
+  morecomment=[f][\color{green!60!black}][0]+,
+  % file name and time stamp old file
+  morecomment=[f][\color{magenta}][0]{---},
+  % file name and time stamp new file
+  morecomment=[f][\color{magenta}][0]{+++},
+  % Binary files ... differ
+  morecomment=[f][\color{gray}][0]{Binary},
+  % Only in ...: file.txt
+  morecomment=[f][\color{gray}][0]{Only},
+  % old mode ...
+  morecomment=[f][\color{gray}][0]{old},
+  % new mode ...
+  morecomment=[f][\color{gray}][0]{new},
+  % rename from/to ...
+  morecomment=[f][\color{gray}][0]{rename},
+  % similarity index ...%
+  morecomment=[f][\color{gray}][0]{similarity},
+  % deleted file mode ...%
+  morecomment=[f][\color{gray}][0]{deleted},
+  % hunk separator for context format
+  morecomment=[f][\color{magenta}][0]{***************},
+  % deleted lines for normal format
+  morecomment=[f][\color{red!60!black}][0]<,
+  % added lines for normal format
+  morecomment=[f][\color{green!60!black}][0]>,
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{0},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{1},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{2},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{3},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{4},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{5},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{6},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{7},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{8},
+  % line number specifier for normal format
+  morecomment=[f][\color{blue}][0]{9},
+}[comments]
 
 \onehalfspacing
 
@@ -588,5 +651,17 @@ where \(D\) is the number of detectors, \(S\) is the number of sky directions, \
 \section{Conclusion} \label{sec:conclusion}
 
 \printbibliography[heading=bibintoc]{}
+
+\begin{appendices}
+    \section{Patches} \label{app:patches}
+    \subsection{IFO Combo} \label{app:patches:icombo}
+    \linespread{0.3}
+    \footnotesize{\lstinputlisting[language=diff]{../patches/ifocombo.patch}}
+    \linespread{1}
+    \subsection{N-detector} \label{app:patches:ndetector}
+    \linespread{0.3}
+    \footnotesize{\lstinputlisting[language=diff]{../patches/n-detector.patch}}
+    \linespread{1}
+\end{appendices}
 
 \end{document}
