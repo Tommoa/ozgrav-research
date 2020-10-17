@@ -15,6 +15,7 @@
 \usepackage{graphicx}
 \usepackage[table, xcdraw]{xcolor}
 \usepackage{listings}
+\usepackage{caption}
 \usepackage{pgfplots}
 \usepackage{tikz}
 \usepackage[
@@ -488,25 +489,46 @@ The final design will be evaluated according to these criteria in section \ref{s
 
 \subsection{A complexity analysis of the parallel post-processing of the SPIIR pipeline} \label{sec:discuss:analysis}
 
+As discussed in \ref{sec:lit_review:par_comp_analysis}, the SPIIR pipeline is designed to be as low latency as possible, and a asymptotic complexity analysis of components that may be impacted by the addition of new detectors allows for the measurements of the potential cost of doing so.
+This subsection aims to determine the complexity analysis of the coherent post-processing step of the SPIIR pipeline to understand the impact of increasing the number of detectors.
+
 Coherent post-processing was introduced in \cite{ChuThesis} by Qi Chu et al as an alternative to the coincidence post-processing used by all other pipelines (see section \ref{sec:lit_review:pipelines}).
-\cite{ChuThesis} states that the multi-detector maximum log likelihood ratio to be equal to the coherent signal to noise ratio \(\rho{}^2_c\), which can be expressed as:
-
-\begin{equation} \label{eq:coh_snr}
-    \rho^2_c = \underset{\max\{A_{jk},\theta,t_{c},\alpha,\delta\}}{\ln \mathcal{L}_{NW}},
-\end{equation}
-\\
-where \(A_{jk}\) describes the relative inclination of the detector to the source, \(\theta\) is the mass of the source, \(\alpha\) and \(\beta\) are the sky directions of the source and \(\mathcal{L}_{NW}\) is the network log likelihood network.
-
 In \cite{ChuThesis}, the computational cost of the coherent search is estimated to be \(O(2N^3_dN_mN_p)\), where \(N_d\) is the number of detectors, \(N_m\) is the number of sets of IIR filters (called templates), and \(N_p\) is the number of potential sky locations.
 Further optimizations were made to the pipeline in 2018 \cite{SPIIRGPU2018}, including moving to using GPU acceleration.
 Whilst \cite{SPIIRGPU2018} discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed.
 In addition, \cite{SPIIRGPU2018} parallelised the pipeline, leading to additional potential changes to the potential overall cost.
 
-``OzGrav Research utils'' (see section \ref{sec:design_process:tools}) were used to generate a callgraph to determine the data flow for this analysis \cite[\texttt{resources/callgraph.png}]{ozgrav_research}.
+``OzGrav Research utils'' (see section \ref{sec:design_process:tools}) were used to generate a callgraph to determine the data flow for this analysis \cite[see][\texttt{resources/callgraph.png}]{ozgrav_research}.
+A simplified version of the callgraph can be seen in figure \ref{fig:callgraph}.
 
-\subsubsection{Motivation} \label{sec:discuss:analysis:motivation}
+\begin{figure}[t]
+    \centering
+    \begin{tikzpicture}[
+        cpu/.style={rectangle, text=black, draw=red!60, fill=red!5, very thick, minimum size=7mm},
+        gpu/.style={rectangle, text=black, draw=green!60, fill=green!5, very thick, minimum size=7mm},
+]
+        \node[cpu] (cudapostcohprocess) {\texttt{cuda\_postcoh\_process}};
+        \node[cpu] (peaksoverthresh) [below left=of cudapostcohprocess] {\texttt{peaks\_over\_thresh}};
+        \node[cpu] (transposesnglsnr) [below=of cudapostcohprocess] {\texttt{transpose\_snglsnr}};
+        \node[gpu] (transposematrix) [below left=of transposesnglsnr] {\texttt{transpose\_matrix}};
+        \node[cpu] (cohsnrandchisq) [below right=of cudapostcohprocess] {\texttt{cohsnr\_and\_chisq}};
+        \node[gpu] (kercohmax) [below left=of cohsnrandchisq, right=of transposematrix] {\texttt{ker\_coh\_max\_and\_chisq\_versatile}};
+        \node[gpu] (kercohskymap) [below=of cohsnrandchisq, right=of kercohmax] {\texttt{ker\_coh\_skymap}};
 
-% TODO: Write motivation for complexity analysis. See seminar-presentation
+        \draw[->] (cudapostcohprocess.south) -- (peaksoverthresh.north);
+        \draw[->] (cudapostcohprocess.south) -- (transposesnglsnr.north);
+        \draw[->] (cudapostcohprocess.south) -- (cohsnrandchisq.north);
+        \draw[->] (transposesnglsnr.south) -- (transposematrix.north);
+        \draw[->] (cohsnrandchisq.south) -- (kercohmax.north);
+        \draw[->] (cohsnrandchisq.south) -- (kercohskymap.north);
+        \draw[->, dashed] (peaksoverthresh.east) -- (transposesnglsnr.west);
+        \draw[->, dashed] (transposesnglsnr.east) -- (cohsnrandchisq.west);
+        \draw[->, dashed] (transposematrix.east) -- (kercohmax.west);
+        \draw[->, dashed] (kercohmax.east) -- (kercohskymap.west);
+    \end{tikzpicture}
+    \caption{Simplified callgraph for coherent post-processing in the SPIIR pipeline.\\ Function calls are represented by solid arrows, the ordering of the calls is represented by dashed arrows.\\ GPU functions are in green boxes, and CPU functions are in red boxes.}
+    \label{fig:callgraph}
+\end{figure}
 
 \subsubsection{Maximum element reduction} \label{sec:discuss:analysis:reduce}
 
