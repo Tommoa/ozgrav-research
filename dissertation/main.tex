@@ -382,6 +382,9 @@ This section aims to lay out and discuss the various design constraints that sho
 The below constraints are ordered in importance.
 
 \begin{itemize}
+    \item \textbf{Output results must be unchanged}\\
+        A major measure of a gravitational-wave detection pipeline is its accuracy.
+        Any design should not impact or modify the output results of the existing pipeline on the same data.
     \item \textbf{The output table format should be unchanged}\\
         Events that are detected by the SPIIR pipeline are uploaded to the gravitational-wave candidate event database (GraceDB) using a unified table format to represent event data \cite{gracedb}.
         It is of critical importance that the SPIIR pipeline is still able to interact with GraceDB so that it can continue to have detected events considered by the wider gravitational-wave community.
@@ -440,7 +443,7 @@ This includes the \texttt{PostcohInspiralTable} \cite[\texttt{gstlal-spiir/pytho
 These files are mixed between several different languages; C, CUDA (see section \ref{sec:lit_review:cuda}), and Python.
 As such, any \(N\)-detector implementation must consider the ability to:
 \begin{itemize}
-    \item \textbf{Move easily between GPU and CPU memory}\\
+    \item \textbf{Move data structures easily between GPU and CPU memory}\\
         CUDA provides two interfaces for allocating and managing memory across a GPU and CPU; managed memory and memory copies.
         Managed memory automatically propagates changes to allocated memory in a GPU or CPU to the other address space, whilst memory copies copy a block of memory from one address space to another.
  
@@ -454,6 +457,21 @@ As such, any \(N\)-detector implementation must consider the ability to:
 
 \subsection{Evaluation criteria} \label{sec:design_process:criteria}
 % Framework for evaluating the success of the resulting design
+
+The success of a design and implementation needs to be evaluated according to some predefined criteria.
+The final design will be evaluated according to these criteria in section \ref{sec:final_design:evaluation}.
+
+\begin{enumerate}
+    \item Output results must be unchanged
+    \item The output table format should be unchanged
+    \item Adding new detectors should be able to be done by a non-technical individual
+        \begin{enumerate}
+            \item Maximum number of required edited files: 3
+        \end{enumerate}
+    \item Unchanged external interface
+    \item Exposing of individual detectors in Python
+    \item Changing number of detectors compiles correctly
+\end{enumerate}
 
 \section{Final Design} \label{sec:final_design}
 
