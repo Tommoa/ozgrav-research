@@ -126,8 +126,13 @@
 
 \begin{document}
 \maketitle{}
+\begin{center}
+    Word count: 7518
+\end{center}
 \newpage{}
 \tableofcontents{}
+\listoffigures{}
+\listoftables{}
 \newpage{}
 
 \begin{minipage}[t]{0.6\textwidth}
@@ -181,7 +186,7 @@ Finally, section \ref{sec:further_work} will provide some suggestions for future
 \begin{figure}
     \centering
     \includegraphics[scale=0.18]{../seminar-presentation/online_xdet.jpg}
-    \caption{The structure of the SPIIR pipeline}
+    \caption{The structure of the SPIIR pipeline.}
     \label{fig:spiir_structure}
 \end{figure}
 
@@ -289,7 +294,9 @@ We can also then define \textit{\textbf{parallelism}} as the maximum possible sp
         \draw[->] (centeru.east) -- (right.west);
         \draw[->] (centerl.east) -- (right.west);
     \end{tikzpicture}
-    \caption{An example of calculating work for a merge-sort like algorithm. Summed nodes are in red.\label{fig:work}}
+    \caption{An example of calculating work for a merge-sort like algorithm.}
+    Summed nodes are in red.
+    \label{fig:work}
 \end{figure}
 
 \begin{figure}[t]
@@ -329,7 +336,9 @@ We can also then define \textit{\textbf{parallelism}} as the maximum possible sp
         \draw[->] (centeru.east) -- (right.west);
         \draw[->] (centerl.east) -- (right.west);
     \end{tikzpicture}
-    \caption{An example of calculating span for a merge-sort like algorithm. Summed nodes are in red.\label{fig:span}}
+    \caption{An example of calculating span for a merge-sort like algorithm.}
+    Summed nodes are in red.
+    \label{fig:span}
 \end{figure}
 
 Using the above definitions, we can re-derive several laws that provide lower bounds on the running time of \(T_P\).
@@ -667,7 +676,8 @@ A simplified version of the callgraph can be seen in figure \ref{fig:callgraph}.
         \draw[->, dashed] (transposematrix.east) -- (kercohmax.west);
         \draw[->, dashed] (kercohmax.east) -- (kercohskymap.west);
     \end{tikzpicture}
-    \caption{Simplified callgraph for coherent post-processing in the SPIIR pipeline.\\ Function calls are represented by solid arrows, the ordering of the calls is represented by dashed arrows.\\ GPU functions are in green boxes, and CPU functions are in red boxes.}
+    \caption{Simplified callgraph for coherent post-processing in the SPIIR pipeline.}
+    Function calls are represented by solid arrows, the ordering of the calls is represented by dashed arrows.\\ GPU functions are in green boxes, and CPU functions are in red boxes.
     \label{fig:callgraph}
 \end{figure}
 
