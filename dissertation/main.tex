@@ -521,6 +521,30 @@ These both simplify large areas of the codebase, and make up the majority of the
 
 By implementing this change, adding a new detector does not modify the existing indexing into the \texttt{IFOComboMap}, significantly reducing the number of files and code locations that would need to be modified to support a new detector.
 
+\subsubsection{Removing hard-coded detector names} \label{sec:final_design:patches:ndetector}
+
+The patch for this section can be found in appendix \ref{app:patches:ndetector}.
+
+As mentioned in section \ref{sec:design_process:code}, there are two data structures that are passed between the components of the pipeline that can be seen in figure \ref{fig:spiir_structure} \textemdash{} the \texttt{PostcohInspiralTable} and the \texttt{PeakList}.
+These data structures include detector specific variables that are cloned for each detector.
+For example, both structures have \texttt{snglsnr\_H} data members to refer to the signal-to-noise ratio from the Hanford LIGO detector.
+
+Within the \texttt{PostcohInspiralTable} and \texttt{PeakList} themselves, these can simply be moved from detector specific variables to being arrays with a length equal to the number of detectors, however this change causes some issues with the way the C code interacts with both CUDA and Python.
+
+Arrays in C are simply pointers to the first element of a range of contiguous memory \cite{cpplang}, however the CUDA programming model assumes by default that both the host and the GPU maintain their own separate memory spaces as well as separate allocation and deallocation routines \cite{CUDA_Guide}.
+This means that any multi-dimensional arrays (such as the afore mentioned transformation to \texttt{snglsnr\_H}, which was previously a pointer to a float in the \texttt{PeakList} structure), require a additional memory copies per element per dimension, which is both unergonomic and difficult to implement correctly due to each dimension needing to be synchronised before the next dimension can be copied.
+Since CUDA 6.0, CUDA also provides the \texttt{cudaMallocManaged} function, which is accessible from the CPUs and GPUs a system as a common address space.
+By using \texttt{cudaMallocManaged}, the complexity of handling multi-dimensional arrays can be largely elided and passed to the CUDA runtime without a performance impairment.
+
+There are also several challenges that using C arrays to hold detector specific variables presents when trying to provide interoperability with Python.
+First, Python does not have a native contiguous-memory array data type, and instead usually uses linked lists as its array-like data structure.
+This can be rectified by using the array API of NumPy, an open source project for numerical computing with Python, which allows for C arrays to be used in with a Pythonic API \cite{nparray}.
+Second, as per section \ref{sec:design_process:criteria} the individual detector variables should be exposed in Python, despite them no longer existing as singular variables.
+This can be resolved by using Python's attribute getters and setters, which allow for customized functions to be run for getting and setting class attributes \cite{pygetset}.
+When used on a type, an array of getters and setters is used \cite{pytype_getset}, and the modification of this array at runtime allows for the programmatic creation of the individual detector variables.
+
+After implementing this change, the only modifications required to add support for a new detectors are to the \texttt{IFOComboMap} mentioned in section \ref{sec:final_design:patches:ifocombo} and to the list of data sources to ensure that the data from the new detector can be read.
+
 \subsection{Testing} \label{sec:final_design:testing}
 % Testing of the design
 
