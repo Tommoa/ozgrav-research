@@ -843,6 +843,12 @@ If the cubic term about the number of detectors can be reduced to even a squared
 
 \section{Conclusion} \label{sec:conclusion}
 
+This dissertation addresses the issue of a large development cost to add support for new gravitational-wave detectors to gravitational-wave detection pipelines as the number of detectors continues to grow.
+The development cost of adding support for just a single detector can be as high as requiring 1000 lines of code changed across 16 files.
+
+By implementing both the powers of two combination map and by removing individual detector variables by replacing them with C arrays, the development cost of supporting additional detectors has been reduced to be able to be completed by even non-technical individuals, with only two files requiring modifications.
+This represents a large leap forward in the accessibility of adding and testing new detectors in gravitational-wave detection pipelines for the wider scientific community.
+
 \printbibliography[heading=bibintoc]{}
 
 \begin{appendices}
