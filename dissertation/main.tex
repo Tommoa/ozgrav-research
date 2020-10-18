@@ -135,11 +135,17 @@
 \listoftables{}
 \newpage{}
 
-\begin{minipage}[t]{0.6\textwidth}
-    \centering
-    \section*{} \label{sec:abstract}
-    % TODO: Write abstract
-\end{minipage}
+\begin{center}
+    \begin{minipage}[t]{0.6\textwidth}
+        \centering
+        \section*{Abstract} \label{sec:abstract}
+        A large number of gravitational-wave detectors will become operational in the next few years, which presents a great opportunity for existing gravitational-wave detection pipelines to reduce their false detection rate and improve the accuracy of localisation.
+        The ability to easily support the addition of new detectors to the pipelines, however, is an area that requires much improvement, with the SPIIR pipeline potentially requiring the modification of approximately 1000 lines of code across 16 files to add the support of one additional detector.
+        This presents a challenge for the existing gravitational pipelines, as development work that could be spent on improving the latency, precision or accuracy of the pipeline would instead have to be spent preparing the pipeline for the introduction of the new detectors.
+        By introducing a method of mapping combinations of detectors to integers based on powers of two, and by removing individual detector variables by replacing them with C arrays, the development cost of supporting additional detectors in the SPIIR pipeline has been reduced to just 9 lines of code across 2 files.
+        This dissertation also explores the consequences of adding new detectors to the potential latency of the pipeline by applying parallelised asymptotic complexity analysis to its gravitational-wave searching algorithm, finding that the runtime of the algorithm scales cubically with the number of detectors.
+    \end{minipage}
+\end{center}
 
 \section{Introduction} \label{sec:introduction}
 
