@@ -16,6 +16,7 @@
 \usepackage[table, xcdraw]{xcolor}
 \usepackage{listings}
 \usepackage{caption}
+\usepackage{fontspec}
 \usepackage{pgfplots}
 \usepackage{tikz}
 \usepackage[
@@ -26,6 +27,7 @@
 \usepackage{hyperref}
 \addbibresource{bibliography.bib}
 
+\newfontfamily\unicodefont{DejaVu Sans}
 \renewcommand{\dateseparator}{-}
 \makeatletter
 \renewcommand{\paragraph}{\@startsection{paragraph}{4}{0ex}%
@@ -389,6 +391,8 @@ The below constraints are ordered in importance.
     \item \textbf{The output table format should be unchanged}\\
         Events that are detected by the SPIIR pipeline are uploaded to the gravitational-wave candidate event database (GraceDB) using a unified table format to represent event data \cite{gracedb}.
         It is of critical importance that the SPIIR pipeline is still able to interact with GraceDB so that it can continue to have detected events considered by the wider gravitational-wave community.
+        In addition, the pipeline outputs a number of files that are automatically scanned to ensure that the pipeline is functioning correctly.
+        The format of these output files should not change.
     \item \textbf{Adding new detectors should be able to be done by a non-technical individual}\\
         The wider gravitational-wave detection community is largely composed of physicists as opposed to software engineers.
         As such, any changes to the number of detectors are likely to be able to be best tested by non-technical members of the gravitational-wave community, as the expertise to ensure that the values output by the pipeline are correct are more likely to come from physicists.
@@ -560,6 +564,47 @@ All testing of the unit tests and of additional detector support were done succe
 
 \subsection{Evaluation} \label{sec:final_design:evaluation}
 % Evaluation as per above
+
+\begin{table}[t]
+    \centering
+    \begin{tabular}{lc}
+        \rowcolor[HTML]{656565}
+        {\color[HTML]{FFFFFF} Criteria} & {\color[HTML]{FFFFFF} Success} \\
+        Output results must be unchanged & {\unicodefont ✔} \\
+        The output table format should be unchanged & {\unicodefont ✗} \\
+        Adding new detectors should be able to be done by a non-technical individual & {\unicodefont ✔} \\
+        Maximum number of required edited files & 2 \\
+        Unchanged external interface & {\unicodefont ✔} \\
+        Exposing of individual detectors in Python & {\unicodefont ✔} \\
+        Changing number of detectors compiles correctly & {\unicodefont ✔} \\
+    \end{tabular}
+    \caption{An evaluation of the implementation of \(N\)-detector against the criteria specified in section \ref{sec:design_process:criteria}}
+    \label{tab:eval}
+\end{table}
+
+A summary of this section can be found in table \ref{tab:eval}.
+
+\begin{enumerate}
+    \item \textbf{Output results must be unchanged} \\
+        As per section \ref{sec:final_design:testing}, unit testing and manual comparison of the pipeline showed that the output results were unchanged.
+    \item \textbf{The output table format should be unchanged} \\
+        Whilst the table that is sent to GraceDB was unchanged, the files output by the pipeline had their header names modified as the full name of the detector was appended to detector specific variables instead of the one representative letter.
+    \item \textbf{Adding new detectors should be able to be done by a non-technical individual} \\
+        This is subjective, but arguably achieved.
+        \begin{enumerate}
+            \item \textbf{Maximum number of required edited files: 3} \\
+                The number of files that need to be edited to add new detectors is 2, \texttt{gstlal-spiir/include/pipe\_macro.h} for the \texttt{IFOComboMap} and \texttt{gstlal/python/datasource.py} for getting detector data.
+        \end{enumerate}
+    \item \textbf{Unchanged external interface} \\
+        The API for the SPIIR pipeline was not modified, with the only visible changes being internal to the pipeline.
+    \item \textbf{Exposing of individual detectors in Python} \\
+        As per section \ref{sec:final_design:patches:ndetector}, this was done using Python's attribute getters and setters.
+    \item \textbf{Changing number of detectors compiles correctly} \\
+        As per section \ref{sec:final_design:testing}, the modified pipeline compiles and runs correctly with an additional detector added.
+\end{enumerate}
+
+As per the criteria laid out in section \ref{sec:design_process:criteria}, the implementation of \(N\)-detectors has largely been a success, however there are still areas for improvement.
+These areas will be laid out in section \ref{sec:further_work}.
 
 \section{Discussion} \label{sec:discuss}
 
@@ -763,6 +808,9 @@ where \(D\) is the number of detectors, \(S\) is the number of sky directions, \
 \subsection{Improvements to maximum element reduction} \label{sec:discuss:benchmark}
 
 \section{Further work} \label{sec:further_work}
+
+The change to C arrays from individual detector variables in section \ref{sec:final_design:patches:ndetector} uses entirely fixed-size arrays, which means that the memory usage of the pipeline will be invariant to the number of detectors being used, instead it will depend on the number of detectors supported.
+This may present issues with a large number of detectors as GPU memory in particular is generally at a premium.
 
 \section{Conclusion} \label{sec:conclusion}
 
