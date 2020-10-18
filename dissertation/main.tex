@@ -550,7 +550,13 @@ After implementing this change, the only modifications required to add support f
 
 As per section \ref{sec:design_process:tools}, the \texttt{build\_spiir} script from ``SPIIR scripts'' was used for building the changes to the code, and the unit tests from ``GWDC utils'' were used to ensure that the output of the pipeline was not affected by the code modifications.
 
+The unit test in ``GWDC utils'' runs a comparison on a known good output and the signal-to-noise ratio series for each detector in a new build.
+Both patches were built, run and passed the ``GWDC utils'' unit test, ensuring that there were no regressions in output.
+In addition, the outputs of existing combinations of detectors were manually checked against a build of the SPIIR pipeline without the patches to ensure that fields other than the signal-to-noise ratio series were consistent across pipeline versions.
 
+The ease of supporting additional detectors was tested by doing the necessary modifications to support one additional detector, ensuring that the build process worked correctly, and then running the same unit tests as above to ensure no regressions.
+
+All testing of the unit tests and of additional detector support were done successfully with no faults observed on the OzStar cluster.
 
 \subsection{Evaluation} \label{sec:final_design:evaluation}
 % Evaluation as per above
