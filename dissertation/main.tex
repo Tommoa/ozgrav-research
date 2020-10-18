@@ -227,7 +227,7 @@ As such, it is worth understanding the computational model of CUDA for the analy
 In CUDA, each individual sequence of instructions being executed is called a \textit{thread}.
 By its nature, a highly-parallelised environment such as GPUs will run many individual threads, which are partitoned into \textit{warps}, a group of (typically 32) threads.
 Warps are the smallest unit that GPUs schedule, and all threads in a warp must execute the same instruction -- although each thread maintains its own instruction pointer and can branch independently from the warp at a small performance cost.
-The performance cost of branching within a warp means that a major optimization that does not affect computational complexity in CUDA can be simply reducing the number of branches.
+The performance cost of branching within a warp means that a major optimisation that does not affect computational complexity in CUDA can be simply reducing the number of branches.
 Warps are further organised into thread blocks, which contain a small amount of fast memory shared between the threads in the block.
 Blocks in CUDA are typically executed on the same Simultaneous Multiprocessor (SM).
 The CUDA Programming Guide states that the number of blocks and warps that can reside and be processed together on an SM depends on the number of registers and shared memory available on the SM, as well as on a CUDA defined maximum number of blocks and warps \cite{CUDA_Guide}.
@@ -637,7 +637,7 @@ This subsection aims to determine the complexity analysis of the coherent post-p
 
 Coherent post-processing was introduced in 2017 by Qi Chu et al as an alternative to the coincidence post-processing used by all other pipelines (see section \ref{sec:lit_review:pipelines}) \cite{ChuThesis}.
 In the original work, the computational cost of the coherent search is estimated to be \(O(2N^3_dN_mN_p)\), where \(N_d\) is the number of detectors, \(N_m\) is the number of sets of IIR filters (called templates), and \(N_p\) is the number of potential sky locations \cite{ChuThesis}.
-Further optimizations were made to the pipeline in 2018, including moving to using GPU acceleration, and whilst a paper outlining the changes made discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed, despite the parallelisation of GPU acceleration leading to additional changes to the overall potential cost \cite{SPIIRGPU2018}.
+Further optimisations were made to the pipeline in 2018, including moving to using GPU acceleration, and whilst a paper outlining the changes made discusses a number of constant time optimisations made to the pipeline, the computational cost of the overall process is not discussed, despite the parallelisation of GPU acceleration leading to additional changes to the overall potential cost \cite{SPIIRGPU2018}.
 
 ``OzGrav Research utils'' (see section \ref{sec:design_process:tools}) were used to generate a callgraph to determine the data flow for this analysis \cite[see][\texttt{resources/callgraph.png}]{ozgrav_research}.
 A simplified version of the callgraph can be seen in figure \ref{fig:callgraph}.
@@ -828,10 +828,18 @@ As equation \ref{eq:total_span} shows that even with the use of an infinite numb
 
 As such, it would be the recommendation of the author that work is done to mitigate the increased latency that would be introduced by the addition of new detectors.
 
-\section{Further work} \label{sec:further_work}
+\section{Future work} \label{sec:further_work}
 
-The change to C arrays from individual detector variables in section \ref{sec:final_design:patches:ndetector} uses entirely fixed-size arrays, which means that the memory usage of the pipeline will be invariant to the number of detectors being used, instead it will depend on the number of detectors supported.
-This may present issues with a large number of detectors as GPU memory in particular is generally at a premium.
+The change to C arrays from individual detector variables in section \ref{sec:final_design:patches:ndetector} uses fixed-size arrays, which means that the memory usage of the pipeline will be invariant to the number of detectors being used, instead it will depend on the number of detectors supported.
+This may present issues with a large number of detectors as memory, and GPU memory in particular, is generally at a premium and should be conserved if possible.
+A potential future research direction in the realm of memory optimisation would be to modify the algorithms and data structures to size the arrays to the number of detectors being used.
+
+One method that could be used to counter the potential runtime cost of adding new detectors \textemdash{} as discussed in section \ref{sec:discuss:analysis:implications} \textemdash{} is to have some detectors skip the coherent search step.
+The detectors skipping the coherent search step could be reintroduced later in the pipeline to help improve the accuracy of the generated skymaps whilst not causing a noticeable impairment of performance.
+Research into a potential restructuring to support this is already under way, with a working prototype expected to be completed within the coming months.
+
+Another potential region for research would be to investigate alternative parallelisation techniques and algorithms in the SPIIR pipeline's coherent post-processing.
+If the cubic term about the number of detectors can be reduced to even a squared term, the runtime cost of adding new detectors would be significantly reduced.
 
 \section{Conclusion} \label{sec:conclusion}
 
