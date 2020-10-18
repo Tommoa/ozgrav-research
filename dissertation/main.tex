@@ -116,7 +116,7 @@
 \title{\normalsize \textsc{Masters Dissertation}
         \\ [1.5cm]
         \HRule{0.5pt} \\
-        \LARGE \textbf{\uppercase{Implementation of \(N\)-detectors in a gravitational wave detection pipeline}}
+        \LARGE \textbf{\uppercase{The support of any number of detectors in a gravitational wave detection pipeline}}
         \HRule{2pt} \\ [0.5cm]
         \normalsize \date{\today} \vspace*{2\baselineskip}}
 
@@ -169,14 +169,14 @@ As with many of the other gravitational wave detection pipelines, providing supp
 As the number of available interferometers continues to grow, development work that could be spent on improving the optimisation, precision, or accuracy of the pipeline would instead have to be spent allowing for those detectors to be used.
 \\
 
-Section \ref{sec:lit_review} shall explore the existing literature on the implementation of \(N\)-detectors in other gravitational wave detection pipelines, in addition to exploring CUDA and complexity analysis, two tools that will be used in the analysis of the final design.
-Section \ref{sec:design_process} will look at the existing pipeline structure and its deficiencies for implementing \(N\)-detectors.
-It will also determine any constraints a design for implementing \(N\)-detectors would have, and will provide a framework for evaluating the success of the resulting design.
+Section \ref{sec:lit_review} shall explore the existing literature on the implementation of any number of detectors in other gravitational wave detection pipelines, in addition to exploring CUDA and complexity analysis, two tools that will be used in the analysis of the final design.
+Section \ref{sec:design_process} will look at the existing pipeline structure and its deficiencies for supporting any number of detectors.
+It will also determine any constraints a design for implementing the support of any number of detectors would have, and will provide a framework for evaluating the success of the resulting design.
 The final design will be presented in section \ref{sec:final_design}, and will explore the implementation details of the design and how it interacts with the existing programming interface that SPIIR provides.
 A discussion about the implications of this design will be done in section \ref{sec:discuss}, with additional research on those implications being presented there.
 Finally, section \ref{sec:further_work} will provide some suggestions for future research that can be based on this research.
 
-\textit{This dissertation aims to layout the design and implementation work done to provide the SPIIR pipeline with the ability to support any number of detectors without hindering the functionality of the pipeline (\(N\)-detectors).}
+\textit{This dissertation aims to layout the design and implementation work done to provide the SPIIR pipeline with the ability to easily support the addition of any number of detectors for gravitational-wave searching without hindering the existing functionality of the pipeline.}
 
 \begin{figure}
     \centering
@@ -188,10 +188,10 @@ Finally, section \ref{sec:further_work} will provide some suggestions for future
 \section{Literature Review} \label{sec:lit_review}
 
 This section explores the existing research that is relevant to this project.
-Section \ref{sec:lit_review:pipelines} shall explore the implementations that other gravitational wave detection pipelines have used to deal with with a growing number of detectors in their algorithms and interfaces, whilst section \ref{sec:lit_review:cuda} will explore the computational model of CUDA, the library that SPIIR uses for parallelism.
-Finally, section \ref{sec:lit_review:par_comp_analysis} shall explore the literature of parallel complexity analysis, which will allow for the later analysis of the pipeline in section \ref{sec:discuss:analysis}.
+Section \ref{sec:lit_review:pipelines} will explore the implementations that other gravitational wave detection pipelines have used to deal with a growing number of detectors in their algorithms and interfaces, whilst section \ref{sec:lit_review:cuda} will outline the computational model of CUDA, the library that SPIIR uses for parallelism.
+Finally, section \ref{sec:lit_review:par_comp_analysis} will summarise the literature about parallel complexity analysis, which will allow for the later analysis of the pipeline in section \ref{sec:discuss:analysis}.
 
-\subsection{\(N\)-detector work in other gravitational wave detection pipelines} \label{sec:lit_review:pipelines}
+\subsection{Supporting any number of detectors work in other gravitational wave detection pipelines} \label{sec:lit_review:pipelines}
 
 There are, of course, other gravitational wave detection pipelines that may also have to consider the issue of dealing with a growing number of detectors.
 As we are in the process of designing a new architecture to allow for any number of detectors to be used, it is well worth examining the methods that the other pipelines may use to shape our own design.
@@ -207,18 +207,16 @@ As such, it is unlikely that all of the principles for dealing with additional d
 PyCBC is one of the best known toolkits for gravitational wave astronomy, and was one of the pipelines used in the original 2015 gravitational wave detection \cite{pycbc_home}.
 From an examination of the codebase of the latest version of PyCBC \cite[October 2020]{pycbc}, it can be observed that the codebase itself makes no direct mention of detectors \textemdash{} instead it provides a generic \texttt{Detector} class as a wrapper around LALSuite's \cite{lalsuite} \texttt{LALDetector} structure for validation, which in turns provides utilities for returning information about the detector as well as methods for getting readings from it.
 
-This allows PyCBC to provide an entirely generic gravitational wave searching algorithm library for any input detectors, although the algorithm only supports using two detectors at a time, providing that the detectors are in the LALSuite library.
-Thus, we can note two things; for PyCBC to allow for additional detectors to be used, they simply update their dependency on the LALSuite library, and; PyCBC doesn't quite support \(N\)-detectors in the sense described in section \ref{sec:introduction:aims}, instead it allows for any supported detectors to be used in a two-detector search.
-This means that whilst we cannot use PyCBC when considering how to support any number of detectors within a gravitational-wave searching algorithm nor its outputs, we can use PyCBC to consider a programming interface with which to support other detectors.
+This allows PyCBC to provide an entirely generic gravitational wave searching algorithm library for any input detectors (although the algorithm only supports using two detectors at a time) providing that the detectors are in the LALSuite library \textemdash{} and adding support for additional detectors is a simple matter of updating the dependency on LALSuite.
+
+The approach to supporting new detectors that PyCBC uses is close to ideal \textemdash{} it shifts the burden of the support to a well-maintained third-party library.
+PyCBC's lack of support, however, for using any more than two detectors at a time for gravitational-wave searching limits the applicability of its approach for the SPIIR pipeline, as SPIIR must be able to search using any subset of the supported detectors.
 \\
 
 GstLAL is gravitational wave detection library, that exposes components of LALSuite \cite{lalsuite} as GStreamer elements for use in other analysis pipelines \textemdash{} including the SPIIR pipeline \textemdash{} as well as providing its own pipeline for processing raw signals from detectors into lists of gravitational wave candidates \cite{gstlal_docs}.
 The GstLAL's pipeline hard-codes the detector names into both its inputs and its outputs, however the algorithm used for detection itself is actually generic on which detectors are used \cite{gstlal_paper, gstlal_coinc}.
 
-This means that the process of adding support for detectors involves changing a number of different files, as well as modifying several internal data structures \cite{messick} \textemdash{} which means that GstLAL does not support \(N\)-detectors.
-\\
-
-Thus any work done to design \(N\)-detector support for the SPIIR pipeline will be novel.
+This means that the process of adding support for detectors involves changing a number of different files, as well as modifying several internal data structures \cite{messick} \textemdash{} so the existing GstLAL design is non-optimal in terms of the ease of adding new detectors for use.
 
 \subsection{CUDA} \label{sec:lit_review:cuda}
 
@@ -369,7 +367,7 @@ Determining the span, work, parallelism, efficiency and cost, and examining the 
 
 \section{Design process} \label{sec:design_process}
 
-This section aims to layout and discuss the design process used to arrive at the final design of the \(N\)-detector implementation.
+This section aims to layout and discuss the design process used to arrive at the final design and implementation to easily support any number of detectors.
 Section \ref{sec:design_process:constraints} will discuss the various design constraints that should be factored in any design implementation, and section \ref{sec:design_process:tools} will discuss the tools used throughout the design process.
 The code sections that will be impacted by the implementation will be explored in section \ref{sec:design_process:code}, and a framework for evaluating the success of the implementation will be discussed in section \ref{sec:design_process:criteria}.
 
@@ -393,10 +391,10 @@ The below constraints are ordered in importance.
     \item \textbf{Adding new detectors should be able to be done by a non-technical individual}\\
         The wider gravitational-wave detection community is largely composed of physicists as opposed to software engineers.
         As such, any changes to the number of detectors are likely to be able to be best tested by non-technical members of the gravitational-wave community, as the expertise to ensure that the values output by the pipeline are correct are more likely to come from physicists.
-        Any design for \(N\)-detector support should ensure that the process of adding detectors should be easy enough to be completed and tested by a non-technical individual.
+        Any design for supporting any number of detectors should ensure that the process of adding detectors should be easy enough to be completed and tested by a non-technical individual.
     \item \textbf{The external interface of the pipeline should not change}\\
         There are many developers and scientists that are using the existing SPIIR pipeline and use customised scripts that automate gravitational wave searches.
-        The ability to support \(N\)-detectors should be a largely internal change, without needing to modify the way that other users interact with the pipeline and force modifications to existing search scripts.
+        The ability to support any number of detectors should be a largely internal change, without needing to modify the way that other users interact with the pipeline and force modifications to existing search scripts.
     \item \textbf{Individual detectors should still be exposed in Python code}\\
         There are several reasons for this constraint to be factored into any implementation.
         First, exposing individual detectors in the Python code allows for easier programming debugging of any values that may be incorrect, as the values of each detector would be immediately evident by the variable names instead of having be indirectly referenced by knowledge of the data structure used to hold the group of detectors.
@@ -407,7 +405,7 @@ The below constraints are ordered in importance.
 \subsection{Employed tools} \label{sec:design_process:tools}
 % Description of any tools employed
 
-There are a number of tools that were employed in the process of designing and testing the \(N\)-detector implementation.
+There are a number of tools that were employed in the process of designing and testing the implementation of supporting any number of detectors.
 These were:
 \begin{itemize}
     \item \textbf{OzStar \cite{ozstar}}\\
@@ -443,13 +441,13 @@ In addition, the data structures that are passed between the components also nee
 This includes the \texttt{PostcohInspiralTable} \cite[\texttt{gstlal-spiir/python/pipemodules/postcohtable/}]{spiir} and the \texttt{PeakList} \cite[\texttt{gstlal-spiir/gst/cuda/postcoh/postcoh.h}]{spiir}.
 
 These files are mixed between several different languages; C, CUDA (see section \ref{sec:lit_review:cuda}), and Python.
-As such, any \(N\)-detector implementation must consider the ability to:
+As such, any implementation of support for any number of detectors must consider the ability to:
 \begin{itemize}
     \item \textbf{Move data structures easily between GPU and CPU memory}\\
         CUDA provides two interfaces for allocating and managing memory across a GPU and CPU; managed memory and memory copies.
         Managed memory automatically propagates changes to allocated memory in a GPU or CPU to the other address space, whilst memory copies copy a block of memory from one address space to another.
  
-        The existing SPIIR pipeline uses memory copies for transferring data to and from the GPU address space, and as such the implementation of \(N\)-detectors should ensure that the existing memory copies will still function as expected.
+        The existing SPIIR pipeline uses memory copies for transferring data to and from the GPU address space, and as such the implementation of supporting any number of detectors should ensure that the existing memory copies will still function as expected.
         This means that flat data structures would be generally preferred, as they can be copied with a single memory copy.
 
     \item \textbf{Interoperability between Python and C code}\\
@@ -575,7 +573,7 @@ All testing of the unit tests and of additional detector support were done succe
         Exposing of individual detectors in Python & {\unicodefont ✔} \\
         Changing number of detectors compiles correctly & {\unicodefont ✔} \\
     \end{tabular}
-    \caption{An evaluation of the implementation of \(N\)-detector against the criteria specified in section \ref{sec:design_process:criteria}}
+    \caption{An evaluation of the implementation of supporting any number of detectors against the criteria specified in section \ref{sec:design_process:criteria}}
     \label{tab:eval}
 \end{table}
 
@@ -600,7 +598,7 @@ A summary of this section can be found in table \ref{tab:eval}.
         As per section \ref{sec:final_design:testing}, the modified pipeline compiles and runs correctly with an additional detector added.
 \end{enumerate}
 
-As per the criteria laid out in section \ref{sec:design_process:criteria}, the implementation of \(N\)-detectors has been successful, however there are still areas for improvement.
+As per the criteria laid out in section \ref{sec:design_process:criteria}, the implementation to easily support any number of detectors has been successful, however there are still areas for improvement.
 These areas will be outlined in section \ref{sec:further_work}.
 
 \section{Discussion} \label{sec:discuss}
@@ -612,7 +610,7 @@ This subsection aims to determine the complexity analysis of the coherent post-p
 
 Coherent post-processing was introduced in 2017 by Qi Chu et al as an alternative to the coincidence post-processing used by all other pipelines (see section \ref{sec:lit_review:pipelines}) \cite{ChuThesis}.
 In the original work, the computational cost of the coherent search is estimated to be \(O(2N^3_dN_mN_p)\), where \(N_d\) is the number of detectors, \(N_m\) is the number of sets of IIR filters (called templates), and \(N_p\) is the number of potential sky locations \cite{ChuThesis}.
-Further optimizations were made to the pipeline in 2018, including moving to using GPU acceleration, and whilst a paper outlining the changes made discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed, despite the parallisation of GPU acceleration leading to additional changes to the overall potential cost \cite{SPIIRGPU2018}.
+Further optimizations were made to the pipeline in 2018, including moving to using GPU acceleration, and whilst a paper outlining the changes made discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed, despite the parallelisation of GPU acceleration leading to additional changes to the overall potential cost \cite{SPIIRGPU2018}.
 
 ``OzGrav Research utils'' (see section \ref{sec:design_process:tools}) were used to generate a callgraph to determine the data flow for this analysis \cite[see][\texttt{resources/callgraph.png}]{ozgrav_research}.
 A simplified version of the callgraph can be seen in figure \ref{fig:callgraph}.
