@@ -823,7 +823,10 @@ where \(D\) is the number of detectors, \(S\) is the number of sky directions, \
 
 \subsubsection{Implications} \label{sec:discuss:analysis:implications}
 
-% TODO: Write implications -- see seminar-talk
+It can be noted from equation \ref{eq:total_work} that with a single processor, the expected runtime of the  SPIIR pipeline's coherent search scales with the number of detectors cubically, and most of the other terms also scale with the number of detectors.
+As equation \ref{eq:total_span} shows that even with the use of an infinite number of processors there are still terms that scale cubically with the number of detectors, it can be assumed that the real runtime of the coherent post-processing will increase in a cubic manner relative to the number of detectors.
+
+As such, it would be the recommendation of the author that work is done to mitigate the increased latency that would be introduced by the addition of new detectors.
 
 \section{Further work} \label{sec:further_work}
 
