@@ -139,15 +139,15 @@
 \section{Introduction} \label{sec:introduction}
 
 Gravitational waves have been postulated to exist since Albert Einstein's publication of his general theory of relativity, as massive accelerating objects would cause `ripples' in the curvature of spacetime \cite{ligo_einstein}.
-Direct detection of gravitational waves, however, remained beyond the reach of the scientific community until 2015, when the Laser Interferometric Gravitational-Wave Observatory (LIGO \cite[see][]{LIGO}) reported an observation on the 14th of September \cite{FirstDetectionPaper, DetectionWeb}.
+Direct detection of gravitational waves, however, remained beyond the reach of the scientific community until 2015, when the Laser Interferometric Gravitational-Wave Observatory (LIGO \cite[see][]{LIGO}) reported a direct observation of a gravitational wave on the 14th of September \cite{FirstDetectionPaper, DetectionWeb}.
 
-Due to their design, the detectors in use for gravitational wave detection have a significant amount of noise from other sources, whilst the gravitational waves themselves have very weak signals.
+Due to their design, the detectors in use for gravitational wave detection are affected by a significant amount of noise from other sources, whilst the gravitational waves themselves have very weak signals.
 As such, a large amount of data processing must be done to the outputs produced by the detectors in order to filter and extract any possible gravitational waves.
 These data processors are known as ``pipelines'', and have historically been created by research groups that are a part of the LIGO Scientific Collaboration (LSC \cite[see][]{LSC}), and are used throughout observation runs for real-time data analysis.
 \\
 
 The Summed Parallel Infinite Impulse Response (SPIIR \cite[see][]{spiir}) pipeline, based on the SPIIR method originally implemented by Shaun Hooper in 2012, uses a number of IIR (infinite impulse response) filters to approximate possible gravitational wave signals for detection \cite{SPIIRCreate}.
-\cite{SPIIRGPU2018} states that the output of the \(i\)th IIR filter can be expressed with the equation:
+The output of the \(i\)th IIR filter can be expressed with the equation \cite{SPIIRGPU2018}:
 \begin{equation}
     y^i_k = a^i_1y^i_{k-1} + b^i_0x_{k-d_i},
 \end{equation}
@@ -155,7 +155,7 @@ The Summed Parallel Infinite Impulse Response (SPIIR \cite[see][]{spiir}) pipeli
 where \(a^i_1\) and \(b^i_0\) are coefficients, \(k\) is time in a discrete form and \(x_{k-d_i}\) denotes input with some time delay \(d_i\).
 After summing the output of the filters, the resulting signal undergoes coherent post-processing (see section \ref{sec:discuss:analysis} and \cite[chapter 4]{ChuThesis}) to determine the likelihood of an event having occurred.
 
-The pipeline is currently thought to be the fastest of all existing pipelines, is the only pipeline that implements coherent search, and has participated in every observation run since November 2015, successfully detecting most events that were seen in more than one detector.
+The pipeline is currently thought to be the fastest of all existing pipelines, is the only pipeline that implements coherent search, and has participated in every observation run since November 2015, successfully detecting most of the events seen in more than one detector.
 
 The SPIIR pipeline uses GStreamer, a library for composing, filtering and moving around signals, in addition to the GStreamer LIGO Algorithm Library (\texttt{gstlal}) \cite{gstlal}.
 After receiving data from the detectors, the pipeline performs data conditioning and data whitening, followed by the usage of the IIR filters.
@@ -163,22 +163,10 @@ The data is then combined for post-processing, where events are given sky locali
 
 The structure of the SPIIR pipeline can be seen in figure \ref{fig:spiir_structure}.
 
-\begin{figure}
-    \label{fig:spiir_structure}
-    \centering
-    \includegraphics[scale=0.18]{../seminar-presentation/online_xdet.jpg}
-    \caption{The structure of the SPIIR pipeline}
-\end{figure}
-
-\subsection{Research Aims} \label{sec:introduction:aims}
-
 At the time of the start of this research, the SPIIR pipeline supported the use of two or three detectors for gravitational wave detection \textemdash{} the two American LIGO detectors and the Italian Virgo detector \textemdash{} although additional interferometers are likely to be introduced soon.
 This presents several issues with the existing pipeline design.
-
-As with many of the other gravitational wave detection pipelines, providing support for additional detectors is a significant undertaking for the development team, with many hours of work and testing that need to be completed.
+As with many of the other gravitational wave detection pipelines, providing support for additional detectors is a significant undertaking for the development team, with many hours of work and testing needing to be completed.
 As the number of available interferometers continues to grow, development work that could be spent on improving the optimisation, precision, or accuracy of the pipeline would instead have to be spent allowing for those detectors to be used.
-
-Thus, this dissertation aims to layout the design and implementation work done to provide the SPIIR pipeline with the ability to support any number of detectors (\(N\)-detectors).
 \\
 
 Section \ref{sec:lit_review} shall explore the existing literature on the implementation of \(N\)-detectors in other gravitational wave detection pipelines, in addition to exploring CUDA and complexity analysis, two tools that will be used in the analysis of the final design.
@@ -187,6 +175,15 @@ It will also determine any constraints a design for implementing \(N\)-detectors
 The final design will be presented in section \ref{sec:final_design}, and will explore the implementation details of the design and how it interacts with the existing programming interface that SPIIR provides.
 A discussion about the implications of this design will be done in section \ref{sec:discuss}, with additional research on those implications being presented there.
 Finally, section \ref{sec:further_work} will provide some suggestions for future research that can be based on this research.
+
+\textit{This dissertation aims to layout the design and implementation work done to provide the SPIIR pipeline with the ability to support any number of detectors without hindering the functionality of the pipeline (\(N\)-detectors).}
+
+\begin{figure}
+    \centering
+    \includegraphics[scale=0.18]{../seminar-presentation/online_xdet.jpg}
+    \caption{The structure of the SPIIR pipeline}
+    \label{fig:spiir_structure}
+\end{figure}
 
 \section{Literature Review} \label{sec:lit_review}
 
@@ -200,33 +197,33 @@ There are, of course, other gravitational wave detection pipelines that may also
 As we are in the process of designing a new architecture to allow for any number of detectors to be used, it is well worth examining the methods that the other pipelines may use to shape our own design.
 
 Most detection pipelines use a ``coincidence'' search to determine whether a gravitational wave event has occurred.
-Coincidence search, as defined by \cite[chapter 3]{ChuThesis}, is a process which includes finding candidates for gravitational waves from individual detectors, identifying temporal coincidences and producing measures to rank candidate events.
+Coincidence search, is defined as a process which includes finding candidates for gravitational waves from individual detectors, identifying temporal coincidences and producing measures to rank candidate events \cite[chapter 3]{ChuThesis}.
 In more simple terms, a coincidence search considers events which can be seen in a single detector, and then sanity checks that other detectors may have seen them at the same time.
 
 In contrast, the SPIIR pipeline uses a ``coherent'' search to determine whether a gravitational wave event has occurred, using the maximum likelihood ratio principle to consider specific parameters of a potential signal \cite[chapter 4]{ChuThesis}.
 As such, it is unlikely that all of the principles for dealing with additional detectors may translate directly to being able to be used for the SPIIR pipeline, as the method of search differs.
 \\
 
-PyCBC is one of the most well known toolkits for gravitational wave astronomy, and was one of the pipelines used in the original 2015 gravitational wave detection \cite{pycbc_home}.
+PyCBC is one of the best known toolkits for gravitational wave astronomy, and was one of the pipelines used in the original 2015 gravitational wave detection \cite{pycbc_home}.
 From an examination of the codebase of the latest version of PyCBC \cite[October 2020]{pycbc}, it can be observed that the codebase itself makes no direct mention of detectors \textemdash{} instead it provides a generic \texttt{Detector} class as a wrapper around LALSuite's \cite{lalsuite} \texttt{LALDetector} structure for validation, which in turns provides utilities for returning information about the detector as well as methods for getting readings from it.
 
 This allows PyCBC to provide an entirely generic gravitational wave searching algorithm library for any input detectors, although the algorithm only supports using two detectors at a time, providing that the detectors are in the LALSuite library.
 Thus, we can note two things; for PyCBC to allow for additional detectors to be used, they simply update their dependency on the LALSuite library, and; PyCBC doesn't quite support \(N\)-detectors in the sense described in section \ref{sec:introduction:aims}, instead it allows for any supported detectors to be used in a two-detector search.
-This means that whilst we cannot use PyCBC when considering how to support support any number of detectors within a gravitational-wave searching algorithm nor its outputs, we can use PyCBC to consider a programming interface with which to support other detectors.
+This means that whilst we cannot use PyCBC when considering how to support any number of detectors within a gravitational-wave searching algorithm nor its outputs, we can use PyCBC to consider a programming interface with which to support other detectors.
 \\
 
 GstLAL is gravitational wave detection library, that exposes components of LALSuite \cite{lalsuite} as GStreamer elements for use in other analysis pipelines \textemdash{} including the SPIIR pipeline \textemdash{} as well as providing its own pipeline for processing raw signals from detectors into lists of gravitational wave candidates \cite{gstlal_docs}.
 The GstLAL's pipeline hard-codes the detector names into both its inputs and its outputs, however the algorithm used for detection itself is actually generic on which detectors are used \cite{gstlal_paper, gstlal_coinc}.
 
-This means that the process of adding support for detectors involves changing a number of different files, as well as modifying several internal data structures \cite{messick} \textemdash{} which means that whilst GstLAL does not support \(N\)-detectors.
+This means that the process of adding support for detectors involves changing a number of different files, as well as modifying several internal data structures \cite{messick} \textemdash{} which means that GstLAL does not support \(N\)-detectors.
 \\
 
-Thus any work done to design \(N\)-detector support for the SPIIR pipeline will be novel work.
+Thus any work done to design \(N\)-detector support for the SPIIR pipeline will be novel.
 
 \subsection{CUDA} \label{sec:lit_review:cuda}
 
 CUDA \cite{CUDA} is an extension of the C++ programming language created by NVIDIA that allows for the development of GPU-accelerated applications.
-In \cite{SPIIRGPU2018}, the SPIIR pipeline had multiple components rewritten in CUDA to take advantage of the high number of simultaneous threads available compared to CPUs.
+In 2018, the SPIIR pipeline had multiple components rewritten in CUDA to take advantage of the high number of simultaneous threads available compared to CPUs \cite{SPIIRGPU2018}.
 As such, it is worth understanding the computational model of CUDA for the analysis of the SPIIR pipeline.
 
 In CUDA, each individual sequence of instructions being executed is called a \textit{thread}.
@@ -235,10 +232,10 @@ Warps are the smallest unit that GPUs schedule, and all threads in a warp must e
 The performance cost of branching within a warp means that a major optimization that does not affect computational complexity in CUDA can be simply reducing the number of branches.
 Warps are further organised into thread blocks, which contain a small amount of fast memory shared between the threads in the block.
 Blocks in CUDA are typically executed on the same Simultaneous Multiprocessor (SM).
-The CUDA Programming Guide (\cite{CUDA_Guide}) states that the number of blocks and warps that can reside and be processed together on an SM depends on the number of registers and shared memory available on the SM, as well as on a CUDA defined maximum number of blocks and warps.
+The CUDA Programming Guide states that the number of blocks and warps that can reside and be processed together on an SM depends on the number of registers and shared memory available on the SM, as well as on a CUDA defined maximum number of blocks and warps \cite{CUDA_Guide}.
 
 For the purpose of actual time-based computation, the maximum number of threads that can run at any given time is determined by a few factors of the CUDA runtime; the maximum number of resident warps per SM; the maximum number of resident threads per SM; the number of 32-bit registers per thread; the number of 32-bit registers per SM; the number of 32-bit registers per thread block; and the amount of shared memory in each of those divisions.
-Thus, one major determining factor in any speed-up given by a CUDA operation can be determined by the ability to split the workload across threads and thread blocks such that the number of registers and used memory is well balanced across threads.
+Thus, one major determining factor in any speed-up given by a CUDA operation can be determined by the ability to split the workload across threads and thread blocks so that the number of registers and used memory is well balanced across threads.
 
 \subsection{Parallelised Complexity Analysis} \label{sec:lit_review:par_comp_analysis}
 
@@ -360,7 +357,7 @@ The \textit{\textbf{cost}} of a parallel algorithm is minimised when all of proc
     e_P = \dfrac{S_P}{P} = \dfrac{T_1}{C_P}.
 \end{equation}
 
-Another helpful theorem for analysis is \textit{\textbf{Brent's Theorem}}, which states that for an algorithm that can run in parallel on \(N\) processors can be executed on \(P < N\) processors in a time of approximately \cite{BrentsLaw}
+Another helpful theorem for analysis is \textit{\textbf{Brent's Theorem}}, which states that for an algorithm that can run in parallel on \(N\) processors can be executed on \(P < N\) processors in a time of approximately \cite{BrentsLaw}:
 
 \begin{equation} \label{eq:brents_law}
     T_P \leq T_N + \dfrac{T_1-T_N}{P}.
@@ -502,8 +499,8 @@ The original ordering of the array is as follows:
     \item All combinations of three detectors
 \end{itemize}
 
-This presents a problem when adding detectors, as the indexing of the array would change such that; all combinations of two detectors are shifted by at least 1, and; all combinations of three detectors are shifted by at least \(\binom{n}{2}-\binom{n-1}{2}\), where \(n\) is the number of detectors, etc..
-Any time the number of detectors would change, then all of the locations that index the \texttt{IFOComboMap} would also need to change to match, to ensure that they remain indexing the right combinations.
+This presents a problem when adding detectors, as the indexing of the array would change such that; all combinations of two detectors are shifted by at least 1, and; all combinations of three detectors are shifted by at least \(\binom{n}{2}-\binom{n-1}{2}\), where \(n\) is the number of detectors; and so on.
+If the number of detectors changes, then all of the locations that index the \texttt{IFOComboMap} will also need to change, to ensure that they continue to index the right combinations.
 For example, the \texttt{scan\_trigger\_ifos} function in \texttt{gstlal-spiir/gst/cuda/cohfar/background\_stats\_utils.c} determines which detectors should be active by checking the indexes of the \texttt{IFOComboMap}, and if the number of detectors change, all of the indexing done in the function will also have to change.
 
 The \texttt{IFOComboMap} is, as the name suggests, a list of all of the combinations of detectors, not including combinations of zero detectors.
@@ -538,16 +535,16 @@ Within the \texttt{PostcohInspiralTable} and \texttt{PeakList} themselves, these
 Arrays in C are simply pointers to the first element of a range of contiguous memory \cite{cpplang}, however the CUDA programming model assumes by default that both the host and the GPU maintain their own separate memory spaces as well as separate allocation and deallocation routines \cite{CUDA_Guide}.
 This means that any multi-dimensional arrays (such as the afore mentioned transformation to \texttt{snglsnr\_H}, which was previously a pointer to a float in the \texttt{PeakList} structure), require a additional memory copies per element per dimension, which is both unergonomic and difficult to implement correctly due to each dimension needing to be synchronised before the next dimension can be copied.
 Since CUDA 6.0, CUDA also provides the \texttt{cudaMallocManaged} function, which is accessible from the CPUs and GPUs a system as a common address space.
-By using \texttt{cudaMallocManaged}, the complexity of handling multi-dimensional arrays can be largely elided and passed to the CUDA runtime without a performance impairment.
+By using \texttt{cudaMallocManaged}, the complexity of handling multi-dimensional arrays can be largely elided and passed to the CUDA runtime without performance impairment.
 
 There are also several challenges that using C arrays to hold detector specific variables presents when trying to provide interoperability with Python.
 First, Python does not have a native contiguous-memory array data type, and instead usually uses linked lists as its array-like data structure.
-This can be rectified by using the array API of NumPy, an open source project for numerical computing with Python, which allows for C arrays to be used in with a Pythonic API \cite{nparray}.
+This can be rectified by using the array API of NumPy, an open source project for numerical computing with Python, which allows for C arrays to be used within a Pythonic API \cite{nparray}.
 Second, as per section \ref{sec:design_process:criteria} the individual detector variables should be exposed in Python, despite them no longer existing as singular variables.
 This can be resolved by using Python's attribute getters and setters, which allow for customized functions to be run for getting and setting class attributes \cite{pygetset}.
-When used on a type, an array of getters and setters is used \cite{pytype_getset}, and the modification of this array at runtime allows for the programmatic creation of the individual detector variables.
+When used on a data type, an array of getters and setters is used \cite{pytype_getset}, and the modification of this array at runtime allows for the programmatic creation of the individual detector variables.
 
-After implementing this change, the only modifications required to add support for a new detectors are to the \texttt{IFOComboMap} mentioned in section \ref{sec:final_design:patches:ifocombo} and to the list of data sources to ensure that the data from the new detector can be read.
+After implementing this change, the only modifications required to add support for new detectors are to the \texttt{IFOComboMap} mentioned in section \ref{sec:final_design:patches:ifocombo}, and to the list of data sources to ensure that the data from the new detector can be read.
 
 \subsection{Testing} \label{sec:final_design:testing}
 % Testing of the design
@@ -603,21 +600,19 @@ A summary of this section can be found in table \ref{tab:eval}.
         As per section \ref{sec:final_design:testing}, the modified pipeline compiles and runs correctly with an additional detector added.
 \end{enumerate}
 
-As per the criteria laid out in section \ref{sec:design_process:criteria}, the implementation of \(N\)-detectors has largely been a success, however there are still areas for improvement.
-These areas will be laid out in section \ref{sec:further_work}.
+As per the criteria laid out in section \ref{sec:design_process:criteria}, the implementation of \(N\)-detectors has been successful, however there are still areas for improvement.
+These areas will be outlined in section \ref{sec:further_work}.
 
 \section{Discussion} \label{sec:discuss}
 
 \subsection{A complexity analysis of the parallel post-processing of the SPIIR pipeline} \label{sec:discuss:analysis}
 
-As discussed in \ref{sec:lit_review:par_comp_analysis}, the SPIIR pipeline is designed to be as low latency as possible, and a asymptotic complexity analysis of components that may be impacted by the addition of new detectors allows for the measurements of the potential cost of doing so.
+As discussed in \ref{sec:lit_review:par_comp_analysis}, the SPIIR pipeline is designed to be as low latency as possible, and an asymptotic complexity analysis of components that may be impacted by the addition of new detectors allows for the measurements of the potential cost of doing so.
 This subsection aims to determine the complexity analysis of the coherent post-processing step of the SPIIR pipeline to understand the impact of increasing the number of detectors.
 
-Coherent post-processing was introduced in \cite{ChuThesis} by Qi Chu et al as an alternative to the coincidence post-processing used by all other pipelines (see section \ref{sec:lit_review:pipelines}).
-In \cite{ChuThesis}, the computational cost of the coherent search is estimated to be \(O(2N^3_dN_mN_p)\), where \(N_d\) is the number of detectors, \(N_m\) is the number of sets of IIR filters (called templates), and \(N_p\) is the number of potential sky locations.
-Further optimizations were made to the pipeline in 2018 \cite{SPIIRGPU2018}, including moving to using GPU acceleration.
-Whilst \cite{SPIIRGPU2018} discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed.
-In addition, \cite{SPIIRGPU2018} parallelised the pipeline, leading to additional potential changes to the potential overall cost.
+Coherent post-processing was introduced in 2017 by Qi Chu et al as an alternative to the coincidence post-processing used by all other pipelines (see section \ref{sec:lit_review:pipelines}) \cite{ChuThesis}.
+In the original work, the computational cost of the coherent search is estimated to be \(O(2N^3_dN_mN_p)\), where \(N_d\) is the number of detectors, \(N_m\) is the number of sets of IIR filters (called templates), and \(N_p\) is the number of potential sky locations \cite{ChuThesis}.
+Further optimizations were made to the pipeline in 2018, including moving to using GPU acceleration, and whilst a paper outlining the changes made discusses a number of constant time optimizations made to the pipeline, the computational cost of the overall process is not discussed, despite the parallisation of GPU acceleration leading to additional changes to the overall potential cost \cite{SPIIRGPU2018}.
 
 ``OzGrav Research utils'' (see section \ref{sec:design_process:tools}) were used to generate a callgraph to determine the data flow for this analysis \cite[see][\texttt{resources/callgraph.png}]{ozgrav_research}.
 A simplified version of the callgraph can be seen in figure \ref{fig:callgraph}.
@@ -656,7 +651,7 @@ A simplified version of the callgraph can be seen in figure \ref{fig:callgraph}.
 One of the more common operations in the SPIIR pipeline is the concept of a ``maximum element reduction''.
 Reduction is the idea of taking some array of data and producing a single summary output from that array, whether it is the total sum of the array or the maximum value of the array and its index in the array as it is in this case.
 
-\cite{reduction} discusses the computational complexity of reduction algorithms in a parallelised context, noting that the best complexity according to Brent's Law is \(O(\dfrac{N}{\log N})\) threads each doing \(O(\log N)\) sequential work, resulting in a total overall cost of \(O(\dfrac{N}{\log N}\times{\log N}) = O(N)\).
+Harris discusses the computational complexity of reduction algorithms in a parallelised context, noting that the best complexity according to Brent's Law is \(O(\dfrac{N}{\log N})\) threads each doing \(O(\log N)\) sequential work, resulting in a total overall cost of \(O(\dfrac{N}{\log N}\times{\log N}) = O(N)\) \cite{reduction}.
 
 We can note from our own analysis, that the process of reduction can be parallelised by the use of a binary tree of operations, where each vertex in the binary tree combines the results of the two parent vertices.
 In the case of determining the maximum of two numbers, each vertex is identical in the amount of work done, and thus we can determine each vertex to be a unit of work.
@@ -805,8 +800,6 @@ where \(D\) is the number of detectors, \(S\) is the number of sky directions, \
 
 % TODO: Write implications -- see seminar-talk
 
-\subsection{Improvements to maximum element reduction} \label{sec:discuss:benchmark}
-
 \section{Further work} \label{sec:further_work}
 
 The change to C arrays from individual detector variables in section \ref{sec:final_design:patches:ndetector} uses entirely fixed-size arrays, which means that the memory usage of the pipeline will be invariant to the number of detectors being used, instead it will depend on the number of detectors supported.
@@ -820,11 +813,11 @@ This may present issues with a large number of detectors as GPU memory in partic
     \section{Patches} \label{app:patches}
     \subsection{Making \texttt{IFOComboMap} be sums of powers of two} \label{app:patches:icombo}
     \linespread{0.3}
-    \footnotesize{\lstinputlisting[language=diff]{../patches/ifocombo.patch}}
+    %\footnotesize{\lstinputlisting[language=diff]{../patches/ifocombo.patch}}
     \linespread{1}
     \subsection{Removing hard-coded detector names} \label{app:patches:ndetector}
     \linespread{0.3}
-    \footnotesize{\lstinputlisting[language=diff]{../patches/n-detector.patch}}
+    %\footnotesize{\lstinputlisting[language=diff]{../patches/n-detector.patch}}
     \linespread{1}
 \end{appendices}
 
