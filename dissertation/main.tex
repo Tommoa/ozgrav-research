@@ -603,6 +603,33 @@ These areas will be outlined in section \ref{sec:further_work}.
 
 \section{Discussion} \label{sec:discuss}
 
+This section aims to discuss the wider implications of the design chosen in section \ref{sec:final_design} for both the wider gravitational-wave detection pipeline community and the SPIIR pipeline specifically.
+
+Section \ref{sec:discuss:comparison} will compare the new SPIIR pipeline to the previous state of the SPIIR pipeline and other gravitational-wave detection pipelines, and section \ref{sec:discuss:analysis} will consider the implications of supporting any number of detectors on the runtime of the SPIIR pipeline by performing a complexity analysis.
+
+\subsection{Comparison to previous ``state of the art''} \label{sec:discuss:comparison}
+
+\subsubsection{SPIIR pipeline}
+
+It is difficult to compare the difference between adding a detector before these changes and after, as the pipeline was originally created with support for all three currently supported detectors so there has never been a previous requirement to include additional detectors.
+An estimate of the magnitude of work required for supporting additional detectors can, however, be done using the changes made in section \ref{sec:final_design:patches}, as there would be significant overlap between the files that would have to change to support additional detectors and the files modified in those patches.
+Thus, we can estimate that the number of files that would have to change would be 16 files, with a total number of lines changed at approximately 1000.
+
+In comparison, as stated in section \ref{sec:final_design:evaluation}, the number of files that would need to change to support an additional detector is only 2, representing a large leap forward in ease of modification.
+
+\subsubsection{Other pipelines}
+
+\paragraph{PyCBC}
+
+In comparison to PyCBC, the process of adding support for new detectors is still more difficult \textemdash{} it's hard to beat ``just update the library'' for ease of use!
+This work, however, does continue to allow the SPIIR pipeline to continue supporting the use of any subset of supported detectors for gravitational-wave searching, representing a significant continuing advantage that the SPIIR pipeline has over PyCBC.
+
+\paragraph{GstLAL}
+
+The implementation to easily support any number of detectors in SPIIR makes significant improvements of the existing support in GstLAL.
+The most recent detector addition (GEO600, June 2020), involved modifying 9 files with 187 new lines of code \textemdash{} and the detector addition didn't include being able to get the data from the detector, just support for the coincidence search \cite{messick}.
+In comparison, the equivalent change in the SPIIR pipeline would modify only one file (as getting data from the detector isn't required) and would involve adding approximately 8 lines of code, a significant improvement.
+
 \subsection{A complexity analysis of the parallel post-processing of the SPIIR pipeline} \label{sec:discuss:analysis}
 
 As discussed in \ref{sec:lit_review:par_comp_analysis}, the SPIIR pipeline is designed to be as low latency as possible, and an asymptotic complexity analysis of components that may be impacted by the addition of new detectors allows for the measurements of the potential cost of doing so.
