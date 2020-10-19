@@ -127,7 +127,7 @@
 \begin{document}
 \maketitle{}
 \begin{center}
-    Word count: 7518
+    Word count: 7516
 \end{center}
 \newpage{}
 \tableofcontents{}
@@ -137,13 +137,12 @@
 
 \begin{center}
     \begin{minipage}[t]{0.6\textwidth}
-        \centering
         \section*{Abstract} \label{sec:abstract}
         A large number of gravitational-wave detectors will become operational in the next few years, which presents a great opportunity for existing gravitational-wave detection pipelines to reduce their false detection rate and improve the accuracy of localisation.
         The ability to easily support the addition of new detectors to the pipelines, however, is an area that requires much improvement, with the SPIIR pipeline potentially requiring the modification of approximately 1000 lines of code across 16 files to add the support of one additional detector.
         This presents a challenge for the existing gravitational pipelines, as development work that could be spent on improving the latency, precision or accuracy of the pipeline would instead have to be spent preparing the pipeline for the introduction of the new detectors.
-        By introducing a method of mapping combinations of detectors to integers based on powers of two, and by removing individual detector variables by replacing them with C arrays, the development cost of supporting additional detectors in the SPIIR pipeline has been reduced to just 9 lines of code across 2 files.
-        This dissertation also explores the consequences of adding new detectors to the potential latency of the pipeline by applying parallelised asymptotic complexity analysis to its gravitational-wave searching algorithm, finding that the runtime of the algorithm scales cubically with the number of detectors.
+        A solution proposd by this dissertation reduced the development cost of supporting additional detectors in the SPIIR pipeline to just 9 lines of code across 2 files by introducing a method of mapping combinations of detectors to integers based on powers of two and replacing individual detector variables with C arrays.
+        In addition, this work explores the consequences of adding new detectors to the potential latency of the pipeline by applying parallelised asymptotic complexity analysis to its gravitational-wave searching algorithm, finding that the runtime of the algorithm scales cubically with the number of detectors.
     \end{minipage}
 \end{center}
 
@@ -205,7 +204,7 @@ Finally, section \ref{sec:lit_review:par_comp_analysis} will summarise the liter
 \subsection{Supporting any number of detectors work in other gravitational wave detection pipelines} \label{sec:lit_review:pipelines}
 
 There are, of course, other gravitational wave detection pipelines that may also have to consider the issue of dealing with a growing number of detectors.
-As we are in the process of designing a new architecture to allow for any number of detectors to be used, it is well worth examining the methods that the other pipelines may use to shape our own design.
+In the process of designing a new architecture to allow for any number of detectors to be used, it is well worth examining the methods that the other pipelines may use to shape the resulting design.
 
 Most detection pipelines use a ``coincidence'' search to determine whether a gravitational wave event has occurred.
 Coincidence search, is defined as a process which includes finding candidates for gravitational waves from individual detectors, identifying temporal coincidences and producing measures to rank candidate events \cite[chapter 3]{ChuThesis}.
@@ -236,7 +235,7 @@ In 2018, the SPIIR pipeline had multiple components rewritten in CUDA to take ad
 As such, it is worth understanding the computational model of CUDA for the analysis of the SPIIR pipeline.
 
 In CUDA, each individual sequence of instructions being executed is called a \textit{thread}.
-By its nature, a highly-parallelised environment such as GPUs will run many individual threads, which are partitoned into \textit{warps}, a group of (typically 32) threads.
+By its nature, a highly-parallelised environment such as GPUs will run many individual threads, which are partitioned into \textit{warps}, a group of (typically 32) threads.
 Warps are the smallest unit that GPUs schedule, and all threads in a warp must execute the same instruction -- although each thread maintains its own instruction pointer and can branch independently from the warp at a small performance cost.
 The performance cost of branching within a warp means that a major optimisation that does not affect computational complexity in CUDA can be simply reducing the number of branches.
 Warps are further organised into thread blocks, which contain a small amount of fast memory shared between the threads in the block.
@@ -261,7 +260,7 @@ An example of \textit{\textbf{span}} for a merge-sort like algorithm can be seen
 It should be noted that the actual running time of a parallelised computation also depends on the number of processors available for computation and how they are allocated to perform different tasks in the DAG, and thus denoting the running time of parallelised computation on \(P\) processors as \(T_P\) is also common practice.
 This leads to work being denoted at \(T_1\) (the time taken to run on a single processor) and span being denoted as \(T_\infty\) (the time taken on an infinite number of processors).
 Another helpful metric is \textit{\textbf{speed-up}}, which shows how the algorithm scales with additional processors as \(S_P = \dfrac{T_1}{T_P}\).
-We can also then define \textit{\textbf{parallelism}} as the maximum possible speed-up on an infinite number of processors, and thus as \(p = \dfrac{T_1}{T_\infty}\).
+\textit{\textbf{Parallelism}} can thus be defined as the maximum possible speed-up on an infinite number of processors, and thus as \(p = \dfrac{T_1}{T_\infty}\).
 
 \begin{figure}[t]
     \centering
@@ -347,7 +346,7 @@ We can also then define \textit{\textbf{parallelism}} as the maximum possible sp
     \label{fig:span}
 \end{figure}
 
-Using the above definitions, we can re-derive several laws that provide lower bounds on the running time of \(T_P\).
+Using the above definitions, several laws that provide lower bounds on the running time of \(T_P\) can be re-derived.
 
 In one step, a computer with \(P\) processors can do \(P\) units of work, and thus in \(T_P\) time can perform \(PT_P\) units of work.
 As the total work to be done as per above is \(T_1\), the \textit{\textbf{work law}} states that \cite{CLRS_parallel}:
@@ -378,7 +377,7 @@ Another helpful theorem for analysis is \textit{\textbf{Brent's Theorem}}, which
 
 This can be approximated with the upper bound of \(O(\dfrac{T_1}{P} + T_N)\) \cite{brent}.
 
-Determining the span, work, parallelism, efficiency and cost, and examining the application of Brent's theorem to the computations at hand will allow us to analyse the computational complexity of the SPIIR pipeline.
+Determining the span, work, parallelism, efficiency and cost, and examining the application of Brent's theorem to the computations at hand will allow for the computational complexity of the SPIIR pipeline to be analyse.
 
 \section{Design process} \label{sec:design_process}
 
@@ -405,7 +404,7 @@ The below constraints are ordered in importance.
         The format of these output files should not change.
     \item \textbf{Adding new detectors should be able to be done by a non-technical individual}\\
         The wider gravitational-wave detection community is largely composed of physicists as opposed to software engineers.
-        As such, any changes to the number of detectors are likely to be able to be best tested by non-technical members of the gravitational-wave community, as the expertise to ensure that the values output by the pipeline are correct are more likely to come from physicists.
+        As such, any changes to the number of detectors are likely to be best tested by non-technical members of the gravitational-wave community, as the expertise to ensure that the values output by the pipeline are correct are more likely to come from physicists.
         Any design for supporting any number of detectors should ensure that the process of adding detectors should be easy enough to be completed and tested by a non-technical individual.
     \item \textbf{The external interface of the pipeline should not change}\\
         There are many developers and scientists that are using the existing SPIIR pipeline and use customised scripts that automate gravitational wave searches.
@@ -434,7 +433,7 @@ These were:
         The \texttt{build\_spiir} script from this collection was used to build the modifications made to the pipeline.
     \item \textbf{GWDC utils \cite{gwdc_utils}}\\
         ``GWDC utils'' is a collection of utilities maintained by Alex Codoreanu that are written to perform various tasks for the SPIIR pipeline.
-        The unit tests that are exposed as a part of GWDC utils were used for testing that the modifications made to the pipeline didn't affect its output (see section \ref{sec:design_process:constraints}).
+        The unit tests that are exposed as a part of GWDC utils were used for testing that the modifications made to the pipeline did not affect its output (see section \ref{sec:design_process:constraints}).
     \item \textbf{OzGrav Research utils \cite[\texttt{utils/}]{ozgrav_research}}\\
         ``OzGrav Research utils'' is a collection of utilities created by Thomas Almeida to automate the process of creating callgraphs from C or CUDA code on the OzStar cluster.
         These were used in the generation of callgraphs which were used for the complexity analysis in section \ref{sec:discuss:analysis}.
@@ -443,7 +442,7 @@ These were:
 \subsection{Relevant code} \label{sec:design_process:code}
 % Discussion of relevant code sections or requirements
 
-The relevant code sections that may need to be modified to support any number of detectors can be observed in figure \ref{fig:spiir_structure} as any step after the individual detector SPIIR filtering is combined.
+The relevant code sections that may need to be modified to support any number of detectors is any step after the individual detector SPIIR filtering is combined, as observed in figure \ref{fig:spiir_structure}.
 This includes:
 \begin{itemize}
     \item Coherent post-processing with sky localization\\ \cite[\texttt{gstlal-spiir/gst/cuda/postcoh/}]{spiir}
@@ -474,7 +473,7 @@ As such, any implementation of support for any number of detectors must consider
 % Framework for evaluating the success of the resulting design
 
 The success of a design and implementation needs to be evaluated according to some predefined criteria.
-The final design will be evaluated according to these criteria in section \ref{sec:final_design:evaluation}.
+The final design will be evaluated according to the following criteria, with results displayed in section \ref{sec:final_design:evaluation}.
 
 \begin{enumerate}
     \item Output results must be unchanged
@@ -493,14 +492,14 @@ The final design will be evaluated according to these criteria in section \ref{s
 This section aims to describe and expand on the final design and implementation chosen for allowing the SPIIR pipeline to work with any number of detectors.
 
 Section \ref{sec:final_design:patches} discusses the major components and changes that each source code patch makes to the codebase, and the testing that the patches went through will be described in section \ref{sec:final_design:testing}.
-The final design and implementation will be evaluated according to the criteria laid out in section \ref{sec:design_process:criteria} in section \ref{sec:final_design:evaluation}.
+The final design and implementation will be evaluated in section \ref{sec:design_process:criteria}, according to the criteria laid out in section \ref{sec:final_design:evaluation}.
 
 \subsection{Patches} \label{sec:final_design:patches}
 % Description of the patches made
 
 The patches referred to in this section can be found in appendix \ref{app:patches}.
 
-\subsubsection{Making \texttt{IFOComboMap} be sums of powers of two} \label{sec:final_design:patches:ifocombo}
+\subsubsection{Mapping combinations of detectors to integers} \label{sec:final_design:patches:ifocombo}
 
 The patch for this section can be found in appendix \ref{app:patches:icombo}.
 
@@ -512,9 +511,9 @@ The original ordering of the array is as follows:
     \item All combinations of three detectors
 \end{itemize}
 
-This presents a problem when adding detectors, as the indexing of the array would change such that; all combinations of two detectors are shifted by at least 1, and; all combinations of three detectors are shifted by at least \(\binom{n}{2}-\binom{n-1}{2}\), where \(n\) is the number of detectors; and so on.
+This presents a problem when adding detectors, as the indexing of the array would change such that; all combinations of two detectors are shifted by at least 1; and, all combinations of three detectors are shifted by at least \(\binom{n}{2}-\binom{n-1}{2}\), where \(n\) is the number of detectors; and so on.
 If the number of detectors changes, then all of the locations that index the \texttt{IFOComboMap} will also need to change, to ensure that they continue to index the right combinations.
-For example, the \texttt{scan\_trigger\_ifos} function in \texttt{gstlal-spiir/gst/cuda/cohfar/background\_stats\_utils.c} determines which detectors should be active by checking the indexes of the \texttt{IFOComboMap}, and if the number of detectors change, all of the indexing done in the function will also have to change.
+For example, the \texttt{scan\_trigger\_ifos} function in \texttt{gstlal-spiir/gst/cuda/cohfar/background\_stats\_utils.c} determines which detectors should be active by checking the indexes of the \texttt{IFOComboMap}, and if the number of detectors changes, all of the indexing done in the function will also have to change.
 
 The \texttt{IFOComboMap} is, as the name suggests, a list of all of the combinations of detectors, not including combinations of zero detectors.
 As a special case of the binomial expansion;
@@ -535,7 +534,7 @@ These both simplify large areas of the codebase, and make up the majority of the
 
 By implementing this change, adding a new detector does not modify the existing indexing into the \texttt{IFOComboMap}, significantly reducing the number of files and code locations that would need to be modified to support a new detector.
 
-\subsubsection{Removing hard-coded detector names} \label{sec:final_design:patches:ndetector}
+\subsubsection{Replacing individual detector variables with C arrays} \label{sec:final_design:patches:ndetector}
 
 The patch for this section can be found in appendix \ref{app:patches:ndetector}.
 
