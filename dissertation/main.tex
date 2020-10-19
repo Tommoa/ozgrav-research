@@ -127,7 +127,7 @@
 \begin{document}
 \maketitle{}
 \begin{center}
-    Word count: 7516
+    Word count: 7525
 \end{center}
 \newpage{}
 \tableofcontents{}
@@ -141,7 +141,7 @@
         A large number of gravitational-wave detectors will become operational in the next few years, which presents a great opportunity for existing gravitational-wave detection pipelines to reduce their false detection rate and improve the accuracy of localisation.
         The ability to easily support the addition of new detectors to the pipelines, however, is an area that requires much improvement, with the SPIIR pipeline potentially requiring the modification of approximately 1000 lines of code across 16 files to add the support of one additional detector.
         This presents a challenge for the existing gravitational pipelines, as development work that could be spent on improving the latency, precision or accuracy of the pipeline would instead have to be spent preparing the pipeline for the introduction of the new detectors.
-        A solution proposd by this dissertation reduced the development cost of supporting additional detectors in the SPIIR pipeline to just 9 lines of code across 2 files by introducing a method of mapping combinations of detectors to integers based on powers of two and replacing individual detector variables with C arrays.
+        A solution proposed by this dissertation reduced the development cost of supporting additional detectors in the SPIIR pipeline to just 9 lines of code across 2 files by introducing a method of mapping combinations of detectors to integers based on powers of two and replacing individual detector variables with C arrays.
         In addition, this work explores the consequences of adding new detectors to the potential latency of the pipeline by applying parallelised asymptotic complexity analysis to its gravitational-wave searching algorithm, finding that the runtime of the algorithm scales cubically with the number of detectors.
     \end{minipage}
 \end{center}
@@ -171,12 +171,12 @@ The SPIIR pipeline uses GStreamer, a library for composing, filtering and moving
 After receiving data from the detectors, the pipeline performs data conditioning and data whitening, followed by the usage of the IIR filters.
 The data is then combined for post-processing, where events are given sky localization and then inserted into the LIGO event database \cite{SPIIRGPU2018}.
 
-The structure of the SPIIR pipeline can be seen in figure \ref{fig:spiir_structure}.
+The structure of the SPIIR pipeline can be seen in Figure \ref{fig:spiir_structure}.
 
-At the time of the start of this research, the SPIIR pipeline supported the use of two or three detectors for gravitational wave detection \textemdash{} the two American LIGO detectors and the Italian Virgo detector \textemdash{} although additional interferometers are likely to be introduced soon.
-This presents several issues with the existing pipeline design.
+At the time of the start of this research, the SPIIR pipeline supported the use of three detectors for gravitational wave detection \textemdash{} the two American LIGO detectors and the Italian Virgo detector \textemdash{} and additional detectors are planned to be introduced soon.
+This presented several issues with the existing pipeline design.
 As with many of the other gravitational wave detection pipelines, providing support for additional detectors is a significant undertaking for the development team, with many hours of work and testing needing to be completed.
-As the number of available interferometers continues to grow, development work that could be spent on improving the optimisation, precision, or accuracy of the pipeline would instead have to be spent allowing for those detectors to be used.
+As the number of available detectors continues to grow, development work that could be spent on improving the optimisation, precision, or accuracy of the pipeline would instead have to be spent allowing for those detectors to be used.
 \\
 
 Section \ref{sec:lit_review} shall explore the existing literature on the implementation of any number of detectors in other gravitational wave detection pipelines, in addition to exploring CUDA and complexity analysis, two tools that will be used in the analysis of the final design.
@@ -184,7 +184,7 @@ Section \ref{sec:design_process} will look at the existing pipeline structure an
 It will also determine any constraints a design for implementing the support of any number of detectors would have, and will provide a framework for evaluating the success of the resulting design.
 The final design will be presented in section \ref{sec:final_design}, and will explore the implementation details of the design and how it interacts with the existing programming interface that SPIIR provides.
 A discussion about the implications of this design will be done in section \ref{sec:discuss}, with additional research on those implications being presented there.
-Finally, section \ref{sec:further_work} will provide some suggestions for future research that can be based on this research.
+Finally, section \ref{sec:further_work} will provide some suggestions for future research that can be based on this work.
 
 \textit{This dissertation aims to layout the design and implementation work done to provide the SPIIR pipeline with the ability to easily support the addition of any number of detectors for gravitational-wave searching without hindering the existing functionality of the pipeline.}
 
@@ -214,7 +214,7 @@ In contrast, the SPIIR pipeline uses a ``coherent'' search to determine whether 
 As such, it is unlikely that all of the principles for dealing with additional detectors may translate directly to being able to be used for the SPIIR pipeline, as the method of search differs.
 \\
 
-PyCBC is one of the best known toolkits for gravitational wave astronomy, and was one of the pipelines used in the original 2015 gravitational wave detection \cite{pycbc_home}.
+PyCBC is one of the best known toolkits for gravitational-wave astronomy, and was one of the pipelines used in the original 2015 gravitational wave detection \cite{pycbc_home}.
 From an examination of the codebase of the latest version of PyCBC \cite[October 2020]{pycbc}, it can be observed that the codebase itself makes no direct mention of detectors \textemdash{} instead it provides a generic \texttt{Detector} class as a wrapper around LALSuite's \cite{lalsuite} \texttt{LALDetector} structure for validation, which in turns provides utilities for returning information about the detector as well as methods for getting readings from it.
 
 This allows PyCBC to provide an entirely generic gravitational wave searching algorithm library for any input detectors (although the algorithm only supports using two detectors at a time) providing that the detectors are in the LALSuite library \textemdash{} and adding support for additional detectors is a simple matter of updating the dependency on LALSuite.
@@ -223,7 +223,7 @@ The approach to supporting new detectors that PyCBC uses is close to ideal \text
 PyCBC's lack of support, however, for using any more than two detectors at a time for gravitational-wave searching limits the applicability of its approach for the SPIIR pipeline, as SPIIR must be able to search using any subset of the supported detectors.
 \\
 
-GstLAL is gravitational wave detection library, that exposes components of LALSuite \cite{lalsuite} as GStreamer elements for use in other analysis pipelines \textemdash{} including the SPIIR pipeline \textemdash{} as well as providing its own pipeline for processing raw signals from detectors into lists of gravitational wave candidates \cite{gstlal_docs}.
+GstLAL is a gravitational-wave detection library, that exposes components of LALSuite \cite{lalsuite} as GStreamer elements for use in other analysis pipelines \textemdash{} including the SPIIR pipeline \textemdash{} as well as providing its own pipeline for processing raw signals from detectors into lists of gravitational wave candidates \cite{gstlal_docs}.
 The GstLAL's pipeline hard-codes the detector names into both its inputs and its outputs, however the algorithm used for detection itself is actually generic on which detectors are used \cite{gstlal_paper, gstlal_coinc}.
 
 This means that the process of adding support for detectors involves changing a number of different files, as well as modifying several internal data structures \cite{messick} \textemdash{} so the existing GstLAL design is non-optimal in terms of the ease of adding new detectors for use.
@@ -236,7 +236,7 @@ As such, it is worth understanding the computational model of CUDA for the analy
 
 In CUDA, each individual sequence of instructions being executed is called a \textit{thread}.
 By its nature, a highly-parallelised environment such as GPUs will run many individual threads, which are partitioned into \textit{warps}, a group of (typically 32) threads.
-Warps are the smallest unit that GPUs schedule, and all threads in a warp must execute the same instruction -- although each thread maintains its own instruction pointer and can branch independently from the warp at a small performance cost.
+Warps are the smallest unit that GPUs schedule, and all threads in a warp must execute the same instruction \textemdash{} although each thread maintains its own instruction pointer and can branch independently from the warp at a small performance cost.
 The performance cost of branching within a warp means that a major optimisation that does not affect computational complexity in CUDA can be simply reducing the number of branches.
 Warps are further organised into thread blocks, which contain a small amount of fast memory shared between the threads in the block.
 Blocks in CUDA are typically executed on the same Simultaneous Multiprocessor (SM).
@@ -254,9 +254,9 @@ The SPIIR pipeline has been parallelised using CUDA \cite{SPIIRGPU2018}, and thu
 
 According to \cite{CLRS_parallel}, the theoretical efficiency of a multi-threaded or parallelised algorithm can be measured using the metrics of `span', `work', `speed-up' and `parallelism', all of which should be considered in the context of a directed acyclic graph (DAG) of operations in the algorithm.
 The \textit{\textbf{work}} of a parallelised computation is the total time to execute the entire computation sequentially on a single processor, and can be found by summing the total work of every vertex in the DAG.
-An example of \textit{\textbf{work}} for a merge-sort like algorithm can be seen in figure \ref{fig:work}, which has a work of \(O(N\log{N})\).
+An example of \textit{\textbf{work}} for a merge-sort like algorithm can be seen in Figure \ref{fig:work}, which has a work of \(O(N\log{N})\).
 In comparison, the \textit{\textbf{span}} of a parallelised computation is the maximum time taken to complete any path in the DAG.
-An example of \textit{\textbf{span}} for a merge-sort like algorithm can be seen in figure \ref{fig:span}, which has a work of \(O(N)\).
+An example of \textit{\textbf{span}} for a merge-sort like algorithm can be seen in Figure \ref{fig:span}, which has a work of \(O(N)\).
 It should be noted that the actual running time of a parallelised computation also depends on the number of processors available for computation and how they are allocated to perform different tasks in the DAG, and thus denoting the running time of parallelised computation on \(P\) processors as \(T_P\) is also common practice.
 This leads to work being denoted at \(T_1\) (the time taken to run on a single processor) and span being denoted as \(T_\infty\) (the time taken on an infinite number of processors).
 Another helpful metric is \textit{\textbf{speed-up}}, which shows how the algorithm scales with additional processors as \(S_P = \dfrac{T_1}{T_P}\).
@@ -369,7 +369,7 @@ The \textit{\textbf{cost}} of a parallel algorithm is minimised when all of proc
     e_P = \dfrac{S_P}{P} = \dfrac{T_1}{C_P}.
 \end{equation}
 
-Another helpful theorem for analysis is \textit{\textbf{Brent's Theorem}}, which states that for an algorithm that can run in parallel on \(N\) processors can be executed on \(P < N\) processors in a time of approximately \cite{BrentsLaw}:
+Another helpful theorem for analysis is \textit{\textbf{Brent's Theorem}}, which states that for an algorithm that can run in parallel on \(N\) processors, the same algorithm can be executed on \(P < N\) processors in a time of approximately \cite{BrentsLaw}:
 
 \begin{equation} \label{eq:brents_law}
     T_P \leq T_N + \dfrac{T_1-T_N}{P}.
@@ -377,7 +377,7 @@ Another helpful theorem for analysis is \textit{\textbf{Brent's Theorem}}, which
 
 This can be approximated with the upper bound of \(O(\dfrac{T_1}{P} + T_N)\) \cite{brent}.
 
-Determining the span, work, parallelism, efficiency and cost, and examining the application of Brent's theorem to the computations at hand will allow for the computational complexity of the SPIIR pipeline to be analyse.
+Determining the span, work, parallelism, efficiency and cost, and examining the application of Brent's theorem to the computations at hand will allow for the computational complexity of the SPIIR pipeline to be analysed.
 
 \section{Design process} \label{sec:design_process}
 
@@ -411,7 +411,7 @@ The below constraints are ordered in importance.
         The ability to support any number of detectors should be a largely internal change, without needing to modify the way that other users interact with the pipeline and force modifications to existing search scripts.
     \item \textbf{Individual detectors should still be exposed in Python code}\\
         There are several reasons for this constraint to be factored into any implementation.
-        First, exposing individual detectors in the Python code allows for easier programming debugging of any values that may be incorrect, as the values of each detector would be immediately evident by the variable names instead of having be indirectly referenced by knowledge of the data structure used to hold the group of detectors.
+        First, exposing individual detectors in the Python code allows for easier programming debugging of any values that may be incorrect, as the values of each detector would be immediately evident by the variable names instead of having to be indirectly referenced by knowledge of the data structure used to hold the group of detectors.
         In addition, the Python code that interacts with GraceDB iterates through the list of detectors and uses the individual detector names to collect the data required for each event.
         By exposing individual detectors to the Python code, none of the code that interacts with GraceDB would need to change.
 \end{itemize}
@@ -427,7 +427,7 @@ These were:
         Much of the SPIIR development process occurs on OzStar, and its head nodes were used for both building and testing the modifications made to the SPIIR pipeline.
     \item \textbf{LIGO DataGrid (LDG) \cite{ldg}}\\
         The LDG is the collection of clusters that the LSC uses for running the various gravitational-wave detection pipelines on live data.
-        Testing and benchmarking (see section \ref{sec:discuss:benchmark}) were performed on the LDG as the available nodes there closely mirror those that the SPIIR pipeline will run on.
+        Testing and benchmarking were performed on the LDG as the available nodes there closely mirror those that the SPIIR pipeline will run on.
     \item \textbf{SPIIR scripts \cite{build_spiir}}\\
         ``SPIIR scripts'' is a collection of scripts maintained by Patrick Clearwater for use in the SPIIR development process.
         The \texttt{build\_spiir} script from this collection was used to build the modifications made to the pipeline.
@@ -442,7 +442,7 @@ These were:
 \subsection{Relevant code} \label{sec:design_process:code}
 % Discussion of relevant code sections or requirements
 
-The relevant code sections that may need to be modified to support any number of detectors is any step after the individual detector SPIIR filtering is combined, as observed in figure \ref{fig:spiir_structure}.
+The relevant code sections that may need to be modified to support any number of detectors are in any step after the combination of the individual detector SPIIR filtering, as observed in Figure \ref{fig:spiir_structure}.
 This includes:
 \begin{itemize}
     \item Coherent post-processing with sky localization\\ \cite[\texttt{gstlal-spiir/gst/cuda/postcoh/}]{spiir}
@@ -480,7 +480,7 @@ The final design will be evaluated according to the following criteria, with res
     \item The output table format should be unchanged
     \item Adding new detectors should be able to be done by a non-technical individual
         \begin{enumerate}
-            \item Maximum number of required edited files: 3
+            \item Maximum number of required edited files: \(\leq 3\)
         \end{enumerate}
     \item Unchanged external interface
     \item Exposing of individual detectors in Python
@@ -491,7 +491,7 @@ The final design will be evaluated according to the following criteria, with res
 
 This section aims to describe and expand on the final design and implementation chosen for allowing the SPIIR pipeline to work with any number of detectors.
 
-Section \ref{sec:final_design:patches} discusses the major components and changes that each source code patch makes to the codebase, and the testing that the patches went through will be described in section \ref{sec:final_design:testing}.
+Section \ref{sec:final_design:patches} discusses the major components and changes that each source code patch made to the codebase, and the testing that the patches went through will be described in section \ref{sec:final_design:testing}.
 The final design and implementation will be evaluated in section \ref{sec:design_process:criteria}, according to the criteria laid out in section \ref{sec:final_design:evaluation}.
 
 \subsection{Patches} \label{sec:final_design:patches}
@@ -517,7 +517,7 @@ For example, the \texttt{scan\_trigger\_ifos} function in \texttt{gstlal-spiir/g
 
 The \texttt{IFOComboMap} is, as the name suggests, a list of all of the combinations of detectors, not including combinations of zero detectors.
 As a special case of the binomial expansion;
-\( (x + y)^n = \sum^n_{k=0}\binom{n}{k}x^ky^{n-k} \) when \(x = y = 1\), we can note that \cite{CLRS_combinations};
+\( (x + y)^n = \sum^n_{k=0}\binom{n}{k}x^ky^{n-k} \) when \(x = y = 1\), it can be noted that \cite{CLRS_combinations};
 
 \begin{equation}
     \label{eq:power2}
@@ -525,7 +525,7 @@ As a special case of the binomial expansion;
 \end{equation}
 
 As per equation \ref{eq:power2}, the sum of the number of combinations of \(n\) elements is equal to \(2^n\).
-This lends itself well to binary numbers, as an 8-bit binary number can represent \(2^8\) numbers or all the combinations of 8 elements \textemdash{} which means that we can represent all combinations of \(N\) detectors with \(N\) bits.
+This lends itself well to binary numbers, as an 8-bit binary number can represent \(2^8\) numbers or all the combinations of 8 elements \textemdash{} which means that all combinations of \(N\) detectors can be represented using \(N\) bits.
 
 By having each detector represented as a single bit in a \(N\)-bit number, there are a number of advantages across the codebase that are evident as well.
 \texttt{popcount} (or \texttt{POPCNT}) is an instruction for x86 processors and NVIDIA GPUs that returns the number of set (1) bits in an integer, and thus the number of detectors being used can be determined with a single instruction.
@@ -538,7 +538,7 @@ By implementing this change, adding a new detector does not modify the existing 
 
 The patch for this section can be found in appendix \ref{app:patches:ndetector}.
 
-As mentioned in section \ref{sec:design_process:code}, there are two data structures that are passed between the components of the pipeline that can be seen in figure \ref{fig:spiir_structure} \textemdash{} the \texttt{PostcohInspiralTable} and the \texttt{PeakList}.
+As mentioned in section \ref{sec:design_process:code}, there are two data structures that are passed between the components of the pipeline that can be seen in Figure \ref{fig:spiir_structure} \textemdash{} the \texttt{PostcohInspiralTable} and the \texttt{PeakList}.
 These data structures include detector specific variables that are cloned for each detector.
 For example, both structures have \texttt{snglsnr\_H} data members to refer to the signal-to-noise ratio from the Hanford LIGO detector.
 
@@ -582,7 +582,7 @@ All testing of the unit tests and of additional detector support were done succe
         Output results must be unchanged & {\unicodefont ✔} \\
         The output table format should be unchanged & {\unicodefont ✗} \\
         Adding new detectors should be able to be done by a non-technical individual & {\unicodefont ✔} \\
-        Maximum number of required edited files & 2 \\
+        Maximum number of required edited files & {\unicodefont ✔} (2) \\
         Unchanged external interface & {\unicodefont ✔} \\
         Exposing of individual detectors in Python & {\unicodefont ✔} \\
         Changing number of detectors compiles correctly & {\unicodefont ✔} \\
@@ -591,17 +591,17 @@ All testing of the unit tests and of additional detector support were done succe
     \label{tab:eval}
 \end{table}
 
-A summary of this section can be found in table \ref{tab:eval}.
+A summary of this section can be found in Table \ref{tab:eval}.
 
 \begin{enumerate}
     \item \textbf{Output results must be unchanged} \\
         As per section \ref{sec:final_design:testing}, unit testing and manual comparison of the pipeline showed that the output results were unchanged.
     \item \textbf{The output table format should be unchanged} \\
-        Whilst the table that is sent to GraceDB was unchanged, the files output by the pipeline had their header names modified as the full name of the detector was appended to detector specific variables instead of the one representative letter.
+        Whilst the table sent to GraceDB was unchanged, the files output by the pipeline had their header names modified as the full name of the detector was appended to detector specific variables instead of a single representative letter.
     \item \textbf{Adding new detectors should be able to be done by a non-technical individual} \\
         This is subjective, but arguably achieved.
         \begin{enumerate}
-            \item \textbf{Maximum number of required edited files: 3} \\
+            \item \textbf{Maximum number of required edited files: \(\leq3\)} \\
                 The number of files that need to be edited to add new detectors is 2, \texttt{gstlal-spiir/include/pipe\_macro.h} for the \texttt{IFOComboMap} and \texttt{gstlal/python/datasource.py} for getting detector data.
         \end{enumerate}
     \item \textbf{Unchanged external interface} \\
@@ -627,26 +627,26 @@ Section \ref{sec:discuss:comparison} will compare the new SPIIR pipeline to the 
 
 It is difficult to compare the difference between adding a detector before these changes and after, as the pipeline was originally created with support for all three currently supported detectors so there has never been a previous requirement to include additional detectors.
 An estimate of the magnitude of work required for supporting additional detectors can, however, be done using the changes made in section \ref{sec:final_design:patches}, as there would be significant overlap between the files that would have to change to support additional detectors and the files modified in those patches.
-Thus, we can estimate that the number of files that would have to change would be 16 files, with a total number of lines changed at approximately 1000.
+Thus, it can be estimated that the number of files that would have to change would be 16 files, with a total number of lines changed at approximately 1000.
 
-In comparison, as stated in section \ref{sec:final_design:evaluation}, the number of files that would need to change to support an additional detector is only 2, representing a large leap forward in ease of modification.
+In comparison, as stated in section \ref{sec:final_design:evaluation}, the number of files that would need to change to support an additional detector using this system is only 2, representing a large leap forward in ease of modification.
 
 \subsubsection{Other pipelines}
 
 \paragraph{PyCBC}
 
 In comparison to PyCBC, the process of adding support for new detectors is still more difficult \textemdash{} it's hard to beat ``just update the library'' for ease of use!
-This work, however, does continue to allow the SPIIR pipeline to continue supporting the use of any subset of supported detectors for gravitational-wave searching, representing a significant continuing advantage that the SPIIR pipeline has over PyCBC.
+This work, however, does continue to allow the SPIIR pipeline to support the use of any subset of supported detectors for gravitational-wave searching, representing a significant continuing advantage to the SPIIR pipeline over PyCBC.
 
 \paragraph{GstLAL}
 
-The implementation to easily support any number of detectors in SPIIR makes significant improvements of the existing support in GstLAL.
-The most recent detector addition (GEO600, June 2020), involved modifying 9 files with 187 new lines of code \textemdash{} and the detector addition didn't include being able to get the data from the detector, just support for the coincidence search \cite{messick}.
-In comparison, the equivalent change in the SPIIR pipeline would modify only one file (as getting data from the detector isn't required) and would involve adding approximately 8 lines of code, a significant improvement.
+The implementation to easily support any number of detectors in SPIIR makes significant improvements to the existing support in GstLAL.
+The most recent detector addition (GEO600, June 2020) involved modifying 9 files with 187 new lines of code \textemdash{} and the detector addition did not include being able to get the data from the detector, just support for use in the coincidence search algorithm \cite{messick}.
+In comparison, the equivalent change in the SPIIR pipeline would modify only one file (as getting data from the detector is not required) and would involve adding approximately 8 lines of code, a significant improvement.
 
 \subsection{A complexity analysis of the parallel post-processing of the SPIIR pipeline} \label{sec:discuss:analysis}
 
-As discussed in \ref{sec:lit_review:par_comp_analysis}, the SPIIR pipeline is designed to be as low latency as possible, and an asymptotic complexity analysis of components that may be impacted by the addition of new detectors allows for the measurements of the potential cost of doing so.
+As discussed in \ref{sec:lit_review:par_comp_analysis}, the SPIIR pipeline was designed to be as low latency as possible, and an asymptotic complexity analysis of components that may be impacted by the addition of new detectors allows for the measurements of the potential runtime cost of doing so.
 This subsection aims to determine the complexity analysis of the coherent post-processing step of the SPIIR pipeline to understand the impact of increasing the number of detectors.
 
 Coherent post-processing was introduced in 2017 by Qi Chu et al as an alternative to the coincidence post-processing used by all other pipelines (see section \ref{sec:lit_review:pipelines}) \cite{ChuThesis}.
@@ -654,7 +654,7 @@ In the original work, the computational cost of the coherent search is estimated
 Further optimisations were made to the pipeline in 2018, including moving to using GPU acceleration, and whilst a paper outlining the changes made discusses a number of constant time optimisations made to the pipeline, the computational cost of the overall process is not discussed, despite the parallelisation of GPU acceleration leading to additional changes to the overall potential cost \cite{SPIIRGPU2018}.
 
 ``OzGrav Research utils'' (see section \ref{sec:design_process:tools}) were used to generate a callgraph to determine the data flow for this analysis \cite[see][\texttt{resources/callgraph.png}]{ozgrav_research}.
-A simplified version of the callgraph can be seen in figure \ref{fig:callgraph}.
+A simplified version of the callgraph can be seen in Figure \ref{fig:callgraph}.
 
 \begin{figure}[t]
     \centering
@@ -689,28 +689,28 @@ A simplified version of the callgraph can be seen in figure \ref{fig:callgraph}.
 \subsubsection{Maximum element reduction} \label{sec:discuss:analysis:reduce}
 
 One of the more common operations in the SPIIR pipeline is the concept of a ``maximum element reduction''.
-Reduction is the idea of taking some array of data and producing a single summary output from that array, whether it is the total sum of the array or the maximum value of the array and its index in the array as it is in this case.
+Reduction is the idea of taking some array of data and producing a single summary output from that array, whether it is the total sum of the array or the maximum value of the array and its index in the array, as it is in this case.
 
 Harris discusses the computational complexity of reduction algorithms in a parallelised context, noting that the best complexity according to Brent's Law is \(O(\dfrac{N}{\log N})\) threads each doing \(O(\log N)\) sequential work, resulting in a total overall cost of \(O(\dfrac{N}{\log N}\times{\log N}) = O(N)\) \cite{reduction}.
 
-We can note from our own analysis, that the process of reduction can be parallelised by the use of a binary tree of operations, where each vertex in the binary tree combines the results of the two parent vertices.
-In the case of determining the maximum of two numbers, each vertex is identical in the amount of work done, and thus we can determine each vertex to be a unit of work.
-As there are \(N\) elements in the original array, we can note that the height of the binary tree is \(\log N\), and each level of the binary tree has \(N_l/2\) vertices, thus the total number of vertices in the binary tree is \(\sum_{i=0}^{\log N}{2\times{i}} = N\).
-Using this information, we can determine that the \textit{\textbf{work}} of a parallelised reduction is \(T_1 = O(N\times1) = O(N)\), and that the \textit{\textbf{span}} of the reduction is \(T_\infty = O(\log N \times {1}) = O(\log N)\).
+As can be noted from our own analysis, the process of reduction can be parallelised by the use of a binary tree of operations, where each vertex in the binary tree combines the results of the two parent vertices.
+In the case of determining the maximum of two numbers, each vertex is identical in the amount of work done, and thus each vertex is a single unit of work.
+As there are \(N\) elements in the original array, it can be noted that the height of the binary tree is \(\log N\), and each level of the binary tree has \(N_l/2\) vertices, thus the total number of vertices in the binary tree is \(\sum_{i=0}^{\log N}{2\times{i}} = N\).
+Using this information, it can be determined that the \textit{\textbf{work}} of a parallelised reduction is \(T_1 = O(N\times1) = O(N)\), and that the \textit{\textbf{span}} of the reduction is \(T_\infty = O(\log N \times {1}) = O(\log N)\).
 Thus, the \textit{\textbf{parallelism}} of the reduction is:
 
 \[
     p = \dfrac{N}{\log N}.
 \]
 
-Using the span and work laws, we can observe that any algorithm using the above method is bounded by the inequalities \(O(\log N) \leq T_P, \dfrac{O(N)}{P} \leq T_P\).
+Using the span and work laws, it can be observed that any algorithm using the above method is bounded by the inequalities \(O(\log N) \leq T_P, \dfrac{O(N)}{P} \leq T_P\).
 This means that best possible time complexity with \(P\) processors is \(O(\log N)\) (equation \ref{eq:span_law}).
-We can determine the minimum number of processors required to achieve this runtime using the formula \(T_P = O(\log N) = \dfrac{O(N)}{P}\), which can be rearranged to
+The minimum number of processors required to achieve this runtime can be determined using the formula \(T_P = O(\log N) = \dfrac{O(N)}{P}\), which can be rearranged to
 \[
     P = \dfrac{N}{\log N},
 \]
 thus the time complexity cannot improve past \(P = N/\log N\) processors.
-We can also observe that using \(P = N/\log N\) processors gives a \textit{\textbf{cost}} of \(C_P = N\), which is identical to the sequential algorithm.
+It can also be observed that using \(P = N/\log N\) processors gives a \textit{\textbf{cost}} of \(C_P = N\), which is identical to the sequential algorithm.
 \\
 
 Functions that include maximum element reduction will be denoted for clarity with \(M(x)\), where \(x\) is the size of the array being reduced.
@@ -718,20 +718,20 @@ Functions that include maximum element reduction will be denoted for clarity wit
 \subsubsection{Determining the number of samples over a signal-to-noise threshold} \label{sec:discuss:analysis:peaks}
 
 The coherent post-processing in SPIIR determines the number of samples over a signal-to-noise (SNR) threshold in order to not do more work than is required.
-The function that is used for determining the number of samples over the threshold (\texttt{peaks\_over\_thresh}) is a sequential algorithm that runs on the CPU, and shall be analysed as such, although there is an alternative GPU-based implementation that is not used.
+The function that is used for determining the number of samples over the threshold (\texttt{peaks\_over\_thresh}) is a sequential algorithm that runs on the CPU, and is analysed as such, although there is an alternative GPU-based implementation that is not used.
 
 Initially, the function performs a maximum element reduction to get the maximum SNR from the combined IIR filters (templates) for each sample.
-Recalling from section \ref{sec:discuss:analysis:reduce} that for maximum element reduction \(T_1 = O(N)\), and that this operation is performed \(S\) times, where \(S\) is the number of samples, we can determine that this initial reduction has a time complexity of \(O(ST)\), where \(T\) is the number of templates.
+Recalling from section \ref{sec:discuss:analysis:reduce} that for maximum element reduction \(T_1 = O(N)\), and that this operation is performed \(N\) times, where \(N\) is the number of samples, it can determined that this initial reduction has a time complexity of \(O(NT)\), where \(T\) is the number of templates.
 
-The function then determines the maximum SNR across the templates found from the previous step by stepping through every combination of samples and removing SNR samples that are using the same template and have a lower SNR, resulting in a step with a time complexity of \(O(S^2)\).
+The function then determines the maximum SNR across the templates found from the previous step by stepping through every combination of samples and removing SNR samples that are using the same template and have a lower SNR, resulting in a step with a time complexity of \(O(N^2)\).
 
-The function then determines the maximum overall SNR for the input samples (\(O(S)\)) and cycles through every maximum SNR to cluster maxima that are close together to be a single combined maximum.
-The number of maxima is bounded by (\(O(\min\{S,T\})\)) as there cannot be more maxima than there are samples or templates.
+The function then calculates the maximum overall SNR for the input samples (\(O(N)\)) and cycles through every maximum SNR to cluster maxima that are close together to be a single combined maximum.
+The number of maxima is bounded by (\(O(\min\{N,T\})\)), as there cannot be more maxima than there are samples or templates.
 
-This gives the overall function a time complexity of \(O(ST + S^2 + S + \min\{S,T\})\), which can be reduced to the dominating terms of:
+This gives the overall function a time complexity of \(O(NT + S^2 + S + \min\{N,T\})\), which can be reduced to the dominating terms of:
 
 \[
-    O(ST + S^2).
+    O(NT + N^2).
 \]
 
 \subsubsection{Transposing the input matrices} \label{sec:discuss:analysis:transpose}
@@ -743,15 +743,15 @@ The algorithm in use works by breaking the original array into tiles of size \(3
 The tiles are further broken down eight processors per row, so each thread does four copies.
 We can conceptualise this as a DAG by observing that each tile does not depend on any other tile to be completed, and that each tile is composed of \(32\times8\) interdependent processors, each doing 4 units of work.
 
-Using this observation, we can see that the \textit{\textbf{span}} of the algorithm is \(T_\infty = (32\times8)\times4 = O(1024) = O(1)\), and the \textit{\textbf{work}} is \(T_1 = O(ST)\), where \(S\) is the number of samples and \(T\) is the number of templates.
-Thus, the \textit{\textbf{parallelism}} of the transpose is \(p = ST\).
+Using this observation, it can be observed that the \textit{\textbf{span}} of the algorithm is \(T_\infty = (32\times8)\times4 = O(1024) = O(1)\), and the \textit{\textbf{work}} is \(T_1 = O(NT)\), where \(N\) is the number of samples and \(T\) is the number of templates.
+Thus, the \textit{\textbf{parallelism}} of the transpose is \(p = NT\).
 
-Using the span and work laws (equations \ref{eq:span_law} and \ref{eq:work_law}), we can observe that the above method is bounded by the inequalities \(O(1) \leq T_P, \dfrac{O(ST)}{P} \leq T_P\).
+Using the span and work laws (equations \ref{eq:span_law} and \ref{eq:work_law}), it can be shown that the above method is bounded by the inequalities \(O(1) \leq T_P, \dfrac{O(NT)}{P} \leq T_P\).
 Thus it can be determined that the best possible time complexity with \(P\) processors is bounded by ratio of available processors to the size of the transposed matrix (the work law).
 This gives the function an overall time complexity of:
 
 \[
-    O(\dfrac{ST}{P}).
+    O(\dfrac{NT}{P}).
 \]
 
 \subsubsection{Determining the coherent correlation and statistical value of data points} \label{sec:discuss:analysis:coh_max_and_chisq_versatile}
@@ -788,14 +788,9 @@ We can then state that the \textit{\textbf{parallelism}} of calculating the stat
 
 \paragraph{Generating time-shifted background noise statistics} \label{sec:discuss:analysis:background}
 
-% Why do we regenerate the background noise for every peak? Other than where we output
-% the background noise, there's no difference between any of the peaks
-%
-% Removing background noise generation from this function would increase the speed of
-% this function by an order of magnitude
 The function then performs a number of time shifts on background noise for use with the significance estimation.
 The generation of a single background statistical variant is equal to the total work of the function so far, save that instead of using blocks for every peak, each warp looks at a different time shift.
-Thus, whilst the theoretical time complexity does not change, the number of processors available is smaller, so the actual runtime each loop is approximately the warp size slower.
+Thus, whilst the asymptotic time complexity does not change, the number of processors available is smaller, so the actual runtime of each loop is approximately the warp size slower.
 
 \paragraph{Overall computational cost} \label{sec:discuss:analysis:versatile_cost}
 
@@ -813,11 +808,11 @@ As such, this function has a \textit{\textbf{span}} of \(T_\infty = M_{T_\infty}
 \subsubsection{Overall complexity} \label{sec:discuss:analysis:overall}
 
 The total span and work of the coherent post-processing step in the SPIIR pipeline is the sum of the total spans and works of the internal functions.
-Conversely, we cannot determine the overall parallelism as the post-processing step spans a number individual functions that can each be run with a different set of processors.
-As the step to determine the number of peaks over a threshold (see section \ref{sec:discuss:analysis:peaks}) is sequential, we can consider its time complexity as contributing to both the span and work of the total pipeline.
+Conversely, the overall parallelism cannot be determined as the post-processing step spans a number individual functions that can each be run with a different set of processors.
+As the step to determine the number of peaks over a threshold (see section \ref{sec:discuss:analysis:peaks}) is sequential, its time complexity can be considered to be contributing to both the span and work of the total pipeline.
 Another thing to note is that the steps for determining the coherent correlation, statistic value and skymaps (sections \ref{sec:discuss:analysis:coh_max_and_chisq_versatile} and \ref{sec:discuss:analysis:skydir}) will be run for every detector.
 
-With this in mind, we can determine that the \textit{\textbf{span}} of the post-processing is:
+With this in mind, the \textit{\textbf{span}} of the post-processing can be calculated to be:
 
 \[
     T_\infty = O(NT + N^2 + 1 + D(2(D + D^2 + \log S + D \log N) + \log P + D + D^2))
@@ -825,7 +820,7 @@ With this in mind, we can determine that the \textit{\textbf{span}} of the post-
 \begin{equation} \label{eq:total_span}
     = O(NT + N^2 + D^3 + D^2 \log N + D \log S + D \log P),
 \end{equation}
-where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(T\) is the number of templates, \(N\) is the number of samples and \(P = \max\{ S, T \}\).
+where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(T\) is the number of templates, \(N\) is the number of samples and \(P = \min\{ N, T \}\).
 
 The total \textit{\textbf{work}} of the post-processing is:
 \[
@@ -834,23 +829,24 @@ The total \textit{\textbf{work}} of the post-processing is:
 \begin{equation} \label{eq:total_work}
     = O(NT + N^2 + SPD^3 + SPBD^3 + ND^2),
 \end{equation}
-where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(T\) is the number of templates, \(N\) is the number of samples, \(B\) is the number of is the number of times shifts made to background noise and \(P = \max\{ S, T \}\)
+where \(D\) is the number of detectors, \(S\) is the number of sky directions, \(T\) is the number of templates, \(N\) is the number of samples, \(B\) is the number of is the number of times shifts made to background noise and \(P = \min\{ N, T \}\)
 
 \subsubsection{Implications} \label{sec:discuss:analysis:implications}
 
 It can be noted from equation \ref{eq:total_work} that with a single processor, the expected runtime of the  SPIIR pipeline's coherent search scales with the number of detectors cubically, and most of the other terms also scale with the number of detectors.
-As equation \ref{eq:total_span} shows that even with the use of an infinite number of processors there are still terms that scale cubically with the number of detectors, it can be assumed that the real runtime of the coherent post-processing will increase in a cubic manner relative to the number of detectors.
+As equation \ref{eq:total_span} shows, even with the use of an infinite number of processors there are still terms that scale cubically with the number of detectors.
+Therefore, it can be assumed that the real runtime of the coherent post-processing will increase in a cubic manner relative to the number of detectors.
 
-As such, it would be the recommendation of the author that work is done to mitigate the increased latency that would be introduced by the addition of new detectors.
+As such, it would be the recommendation of the author that further work is done to mitigate the increased latency that would be introduced by the addition of new detectors.
 
 \section{Future work} \label{sec:further_work}
 
-The change to C arrays from individual detector variables in section \ref{sec:final_design:patches:ndetector} uses fixed-size arrays, which means that the memory usage of the pipeline will be invariant to the number of detectors being used, instead it will depend on the number of detectors supported.
-This may present issues with a large number of detectors as memory, and GPU memory in particular, is generally at a premium and should be conserved if possible.
+The change to C arrays from individual detector variables in section \ref{sec:final_design:patches:ndetector} uses fixed-size arrays, which means that the memory usage of the pipeline will be invariant to the number of detectors being used, and will instead depend on the number of detectors supported.
+This may present memory issues with a large number of supported detectors as GPU memory is generally at a premium and should be conserved if possible.
 A potential future research direction in the realm of memory optimisation would be to modify the algorithms and data structures to size the arrays to the number of detectors being used.
 
-One method that could be used to counter the potential runtime cost of adding new detectors \textemdash{} as discussed in section \ref{sec:discuss:analysis:implications} \textemdash{} is to have some detectors skip the coherent search step.
-The detectors skipping the coherent search step could be reintroduced later in the pipeline to help improve the accuracy of the generated skymaps whilst not causing a noticeable impairment of performance.
+One method that could be employed to counter the potential runtime cost of adding new detectors \textemdash{} as discussed in section \ref{sec:discuss:analysis:implications} \textemdash{} is to have some detectors skip the coherent search step.
+The detectors skipping this step could be reintroduced later in the pipeline to help improve the accuracy of the generated skymaps whilst not causing a noticeable impairment of performance.
 Research into a potential restructuring to support this is already under way, with a working prototype expected to be completed within the coming months.
 
 Another potential region for research would be to investigate alternative parallelisation techniques and algorithms in the SPIIR pipeline's coherent post-processing.
@@ -861,14 +857,14 @@ If the cubic term about the number of detectors can be reduced to even a squared
 This dissertation addresses the issue of a large development cost to add support for new gravitational-wave detectors to gravitational-wave detection pipelines as the number of detectors continues to grow.
 The development cost of adding support for just a single detector can be as high as requiring 1000 lines of code changed across 16 files.
 
-By implementing both the powers of two combination map and by removing individual detector variables by replacing them with C arrays, the development cost of supporting additional detectors has been reduced to be able to be completed by even non-technical individuals, with only two files requiring modifications.
+By implementing both the mapping combinations of detectors to integers based on powers of two and by removing individual detector variables by replacing them with C arrays, the development cost of supporting additional detectors has been reduced to be able to be completed by even non-technical individuals, with only two files requiring modifications.
 This represents a large leap forward in the accessibility of adding and testing new detectors in gravitational-wave detection pipelines for the wider scientific community.
 
 \printbibliography[heading=bibintoc]{}
 
 \begin{appendices}
     \section{Patches} \label{app:patches}
-    \subsection{Making \texttt{IFOComboMap} be sums of powers of two} \label{app:patches:icombo}
+    \subsection{Making the combinations in \texttt{IFOComboMap} follow sums of powers of two} \label{app:patches:icombo}
     \linespread{0.3}
     \footnotesize{\lstinputlisting[language=diff]{../patches/ifocombo.patch}}
     \linespread{1}
