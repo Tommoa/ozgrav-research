@@ -6,7 +6,9 @@ This repository is a listing of my time doing research for the OzGrav team at UW
 
 OzGrav researches gravitational waves, and attempts to use the data taken from various gravitation wave detectors (primarily LIGO in the US) to determine the direction of various waves so that their sources may be studied. The UWA team has developed a pipeline for analysis called SPIIR (summed parallel infinite impulse response) to provide low latency gravitational wave detection.
 
-My research project primarily focusses on developing methods to filter or ignore specific detectors for detection, but to ensure that those detectors are still synchronized with all the other data that comes in.
+My research project primarily focuses on developing methods to make it easier for the pipeline to be modified to work with any number of input detectors.
+
+As a result of this, there are now future plans to filter or ignore some detectors for detection, but still use those detectors for other parts of the pipeline.
 To give a proper idea, the below is the data flow for the current pipeline:
 
 ![Current pipeline data flow](resources/current_pipeline.png)
@@ -27,6 +29,7 @@ There will be multiple components of this research repository, and links to all 
   - [Seminar abstract](https://tommoa.github.io/ozgrav-research/abstract.pdf)
   - [Seminar presentation](https://tommoa.github.io/ozgrav-research/seminar-presentation.pdf)
   - [Seminar talk](https://tommoa.github.io/ozgrav-research/seminar-talk.pdf)
+- [Dissertation](https://tommoa.github.io/ozgrav-research/dissertation.pdf)
 
 ## Building benchmarks
 
